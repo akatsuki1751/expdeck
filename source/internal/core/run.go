@@ -19,6 +19,7 @@ const (
 	RunFinished    = "finished"
 	RunInterrupted = "interrupted"
 	RunCrashed     = "crashed"
+	RunTimedOut    = "timedout"
 )
 
 // Run 是一次执行。

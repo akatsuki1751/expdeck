@@ -22,8 +22,18 @@ exp wait --run <id>    # 阻塞到结束
 exp show lr/1e-4       # 看假设、状态与全部 run
 exp note lr/1e-4 --append "第 3 个 epoch 开始过拟合"
 exp conclude lr/1e-4 --decision abandon --why "验证集过拟合"
-exp serve              # http://127.0.0.1:8787
+exp serve              # 只监听本机，启动时打印带令牌的地址
 ```
+
+## 网页的访问控制
+
+`exp serve` 每次启动生成一次性令牌，打印形如 `http://127.0.0.1:8787/?token=…` 的地址。用带 token 的地址打开一次，服务端换成 `HttpOnly` + `SameSite=Lax` 的 cookie，之后正常访问。
+
+- 没有令牌：401
+- 跨站 POST（Origin 与 Host 不一致）：403
+- 端口转发出去时，令牌就是唯一的一道门
+
+训练超时由 `exp.toml` 的 `[run] timeout` 控制（例如 `"12h"`），到点先发 `SIGTERM`，十秒后 `SIGKILL`，状态记为 `timedout`。
 
 ## 数据在哪
 

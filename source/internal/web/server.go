@@ -5,6 +5,7 @@ package web
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"embed"
 	"errors"
 	"html/template"
@@ -31,10 +32,14 @@ var templates = template.Must(template.ParseFS(assets, "templates/*.html"))
 // Server 把 core.Kernel 暴露成网页。
 type Server struct {
 	kernel *core.Kernel
+	// Token 非空时，所有请求都要带令牌：先用 ?token=... 打开一次换 cookie。
+	Token string
 }
 
 // New 构造一个网页服务。
 func New(k *core.Kernel) *Server { return &Server{kernel: k} }
+
+const tokenCookie = "exp_token"
 
 // Handler 返回全部路由。
 func (s *Server) Handler() http.Handler {
@@ -45,7 +50,56 @@ func (s *Server) Handler() http.Handler {
 		log.Printf("expdeck web: 读取静态资源失败: %v", err)
 	}
 	mux.HandleFunc("/", s.handle)
-	return mux
+	return s.guard(mux)
+}
+
+// guard 做两件事：令牌校验，以及拒绝跨站写请求。
+func (s *Server) guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 跨站表单提交：Origin 与 Host 不一致就拒。GET 不受影响。
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if origin := r.Header.Get("Origin"); origin != "" {
+				parsed, err := url.Parse(origin)
+				if err != nil || parsed.Host != r.Host {
+					http.Error(w, "跨站请求被拒绝", http.StatusForbidden)
+					return
+				}
+			}
+		}
+		if s.Token == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if supplied := r.URL.Query().Get("token"); supplied != "" {
+			if subtle.ConstantTimeCompare([]byte(supplied), []byte(s.Token)) != 1 {
+				http.Error(w, "令牌无效", http.StatusUnauthorized)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{
+				Name:     tokenCookie,
+				Value:    s.Token,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			})
+			target := *r.URL
+			query := target.Query()
+			query.Del("token")
+			target.RawQuery = query.Encode()
+			http.Redirect(w, r, target.String(), http.StatusSeeOther)
+			return
+		}
+		if cookie, err := r.Cookie(tokenCookie); err == nil {
+			if subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(s.Token)) == 1 {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `<!doctype html><meta charset="utf-8"><title>ExpDeck</title>`+
+			`<p>需要令牌：请用 <code>exp serve</code> 打印的带 token 的链接打开一次。</p>`)
+	})
 }
 
 // handle 按路径分派：/ 是列表，/e/ 之下是详情与编辑。
