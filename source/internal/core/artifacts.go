@@ -3,6 +3,7 @@ package core
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -194,13 +195,19 @@ func (k *Kernel) storeFile(worktree, name string) (Artifact, error) {
 	return Artifact{Name: name, SHA256: digest, Size: size, Store: filepath.ToSlash(rel)}, nil
 }
 
+// fileDigest 流式计算摘要：权重动辄几百 MB，不能整份读进内存。
 func fileDigest(path string) (string, int64, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return "", 0, err
 	}
-	sum := sha256Hex(data)
-	return sum, int64(len(data)), nil
+	defer file.Close()
+	hasher := sha256.New()
+	size, err := io.Copy(hasher, file)
+	if err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), size, nil
 }
 
 // GC 删掉没有任何 run 引用的产物，返回删除数量。
@@ -255,14 +262,18 @@ func (k *Kernel) GC(dryRun bool) (int, error) {
 }
 
 func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
+	source, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0o644)
-}
-
-func sha256Hex(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+	defer source.Close()
+	target, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(target, source); err != nil {
+		target.Close()
+		return err
+	}
+	return target.Close()
 }
