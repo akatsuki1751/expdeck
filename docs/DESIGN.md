@@ -110,7 +110,7 @@ type Run struct {
     ID        string
     Snapshot  string      // 游离提交：权重 → 代码的全部答案在这里
     Base      string      // 上一个快照
-    Status    string      // running | finished | interrupted | crashed
+    Status    string      // running | finished | interrupted | crashed | timedout
     Outcome   string      // valid | invalid | ""
     Metrics   map[string]float64
     Artifacts []Artifact
@@ -296,7 +296,7 @@ on_finish    = ""                 # 跑完执行，用于唤醒 agent 框架
   "schema": 1,
   "run_id": "20261111-142912-7f3a",
   "exp": "exp_id",
-  "status": "running",            // running | finished | interrupted | crashed
+  "status": "running",            // running | finished | interrupted | crashed | timedout
   "outcome": null,                // valid | invalid | null（未评）
   "commit": "52ba741…",           // 快照对应的游离提交
   "base": "…",                    // 上一个 run 的快照，或实验起点
