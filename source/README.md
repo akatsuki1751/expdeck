@@ -1,0 +1,73 @@
+# ExpDeck
+
+用 git 分支管理实验，用普通文件记录假设与结论。agent 用命令行，人用浏览器。
+
+## 构建
+
+```sh
+go build -o exp ./cmd/exp
+```
+
+单二进制，无外部依赖，只用 Go 标准库和 `git` 命令行。
+
+## 快速开始
+
+```sh
+cd 你的仓库            # 必须已经是一个 git 仓库，且至少有一次提交
+exp init               # 建数据根、写 exp.toml、追加 AGENTS.md 说明
+exp new lr/1e-4 --why "lr 降到 1e-4 能提升 r2"
+exp attach lr/1e-4     # 检出到独立目录
+exp run lr/1e-4        # 立刻返回 run 标识
+exp wait --run <id>    # 阻塞到结束
+exp show lr/1e-4       # 看假设、状态与全部 run
+exp note lr/1e-4 --append "第 3 个 epoch 开始过拟合"
+exp conclude lr/1e-4 --decision abandon --why "验证集过拟合"
+exp serve              # http://127.0.0.1:8787
+```
+
+## 数据在哪
+
+```
+<仓库>/.git/exp/
+├── records/            实验、笔记、run（唯一真相）
+├── objects/<xx>/<sha>  产物，按内容哈希
+├── logs/<run>.log      训练日志（不进备份）
+└── registry/           谁在跑（缓存，可重建）
+<仓库>/exp.toml         【提交】项目契约
+<仓库>/.exp/            每个检出各自的缓存，删掉不心疼
+```
+
+记录不在任何分支上，也不随 `clone` 走。备份与恢复：
+
+```sh
+exp backup     # 把记录提交成 book 分支
+exp restore    # 在新克隆里恢复
+```
+
+## agent 契约
+
+所有命令支持 `--json`（标准输出不是终端时自动切换），统一信封：
+
+```json
+{"ok": true, "data": {...}}
+{"ok": false, "error": {"code": "conflict", "message": "..."}}
+```
+
+退出码：`0` 成功 · `1` 通用错误 · `2` 用法错误 · `3` 不存在 · `4` 校验失败 · `5` 冲突。
+所有写操作支持 `--dry-run`；任何命令都不读标准输入。
+
+## 测试
+
+```sh
+go test ./...
+```
+
+端到端用例会构建真实二进制、建临时仓库、真的起进程、真的杀进程。
+
+## 文档
+
+- `docs/INTENT.md` 为什么做
+- `docs/CONTEXT.md` 术语
+- `docs/DESIGN.md` 架构
+- `docs/SPEC.md` 规格与验收
+- `.scratch/expdeck/issues/` 实现票
