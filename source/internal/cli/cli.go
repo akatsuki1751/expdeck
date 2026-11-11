@@ -83,6 +83,10 @@ func Run(env Env, args []string) int {
 		res, err = a.cmdList(rest)
 	case "show":
 		res, err = a.cmdShow(rest)
+	case "doctor":
+		res, err = a.cmdDoctor(rest)
+	case "gc":
+		res, err = a.cmdGC(rest)
 	case "note":
 		res, err = a.cmdNote(rest)
 	case "open":

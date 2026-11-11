@@ -38,6 +38,7 @@ type Run struct {
 	Snapshot   string   `json:"snapshot,omitempty"`
 	Base       string   `json:"base,omitempty"`
 	Metrics    map[string]float64 `json:"metrics,omitempty"`
+	Artifacts  []Artifact         `json:"artifacts,omitempty"`
 }
 
 // RunsDir 是一个实验的 run 目录。

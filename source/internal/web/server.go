@@ -8,10 +8,13 @@ import (
 	"embed"
 	"errors"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 
 	"expdeck/internal/core"
@@ -55,6 +58,11 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		s.handleIndex(w)
 	case strings.HasPrefix(r.URL.Path, "/e/"):
 		s.handleExperiment(w, r)
+	case strings.HasPrefix(r.URL.Path, "/log/"):
+		if !onlyGet(w, r) {
+			return
+		}
+		s.handleLog(w, r)
 	default:
 		s.notFound(w)
 	}
@@ -62,8 +70,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 // handleExperiment 处理 /e/ 之下的请求。
 //
-// 详情页规范地址是 /e/<路径>，编辑页是 /e/<路径>/edit；路径本身以 edit
-// 结尾时（如 /e/foo/edit/）靠尾斜杠仍可落到详情页，不会和编辑页撞车。
+// 详情页规范地址是 /e/<路径>，编辑页是 /e/<路径>/edit，运行动作是
+// /e/<路径>/run 与 /e/<路径>/interrupt。路径本身以 edit 结尾时（如
+// /e/foo/edit/）靠尾斜杠仍可落到详情页，不会和编辑页撞车；以 run 或
+// interrupt 结尾的路径，GET 会按详情页处理，只有 POST 才是动作。
 func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/e/")
 	switch {
@@ -84,11 +94,41 @@ func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Allow", "GET, POST")
 			http.Error(w, "405 方法不允许", http.StatusMethodNotAllowed)
 		}
+	case strings.HasSuffix(rest, "/run"):
+		ref := strings.TrimSuffix(rest, "/run")
+		if ref == "" {
+			s.notFound(w)
+			return
+		}
+		switch r.Method {
+		case http.MethodPost:
+			s.handleRun(w, r, ref)
+		case http.MethodGet, http.MethodHead:
+			s.handleDetail(w, r, strings.TrimSuffix(rest, "/"))
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, "405 方法不允许", http.StatusMethodNotAllowed)
+		}
+	case strings.HasSuffix(rest, "/interrupt"):
+		ref := strings.TrimSuffix(rest, "/interrupt")
+		if ref == "" {
+			s.notFound(w)
+			return
+		}
+		switch r.Method {
+		case http.MethodPost:
+			s.handleInterrupt(w, r, ref)
+		case http.MethodGet, http.MethodHead:
+			s.handleDetail(w, r, strings.TrimSuffix(rest, "/"))
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, "405 方法不允许", http.StatusMethodNotAllowed)
+		}
 	default:
 		if !onlyGet(w, r) {
 			return
 		}
-		s.handleDetail(w, strings.TrimSuffix(rest, "/"))
+		s.handleDetail(w, r, strings.TrimSuffix(rest, "/"))
 	}
 }
 
@@ -107,7 +147,7 @@ func (s *Server) handleIndex(w http.ResponseWriter) {
 }
 
 // handleDetail 渲染实验详情。
-func (s *Server) handleDetail(w http.ResponseWriter, ref string) {
+func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string) {
 	exp, ok := s.findExperiment(w, ref)
 	if !ok {
 		return
@@ -134,11 +174,143 @@ func (s *Server) handleDetail(w http.ResponseWriter, ref string) {
 		Note:     note,
 		Diff:     diff,
 		Worktree: worktree,
+		Error:    r.URL.Query().Get("error"),
 	}
 	if diffErr != nil {
 		data.DiffErr = diffErr.Error()
 	}
+	running, err := s.kernel.RunningRun(exp)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	if running != nil {
+		data.RunID = running.ID
+		data.LogText, data.LogOffset, data.LogTruncated = readLogTail(running.Log)
+	}
 	s.render(w, http.StatusOK, "detail", data)
+}
+
+// handleRun 起一次运行：成功跳回详情页，失败也跳回，只是带上错误提示。
+func (s *Server) handleRun(w http.ResponseWriter, r *http.Request, ref string) {
+	exp, ok := s.findExperiment(w, ref)
+	if !ok {
+		return
+	}
+	if _, err := s.kernel.StartRun(exp, 0); err != nil {
+		s.redirectError(w, r, exp, err)
+		return
+	}
+	http.Redirect(w, r, newExpView(exp).URL, http.StatusSeeOther)
+}
+
+// handleInterrupt 中断该实验当前正在跑的 run；没有在跑时带错误提示跳回。
+func (s *Server) handleInterrupt(w http.ResponseWriter, r *http.Request, ref string) {
+	exp, ok := s.findExperiment(w, ref)
+	if !ok {
+		return
+	}
+	running, err := s.kernel.RunningRun(exp)
+	if err != nil {
+		s.redirectError(w, r, exp, err)
+		return
+	}
+	if running == nil {
+		s.redirectError(w, r, exp, errors.New("没有正在运行的 run"))
+		return
+	}
+	if _, err := s.kernel.InterruptRun(running.ID); err != nil {
+		s.redirectError(w, r, exp, err)
+		return
+	}
+	http.Redirect(w, r, newExpView(exp).URL, http.StatusSeeOther)
+}
+
+// redirectError 把失败原因放进查询串，跳回详情页展示。
+func (s *Server) redirectError(w http.ResponseWriter, r *http.Request, exp *core.Experiment, err error) {
+	target := newExpView(exp).URL + "?error=" + url.QueryEscape(err.Error())
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// logTailLimit 是详情页预读日志的上限：只读末尾，避免把整份训练日志塞进页面。
+const logTailLimit = 64 << 10
+
+// readLogTail 读出日志末尾一段，并返回已读到末尾时的字节偏移。
+//
+// offset 是「本次已经读到文件第几字节」，供页面上的增量轮询接着读。
+func readLogTail(path string) (text string, offset int64, truncated bool) {
+	if path == "" {
+		return "", 0, false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", 0, false
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		return "", 0, false
+	}
+	start := int64(0)
+	if info.Size() > logTailLimit {
+		start = info.Size() - logTailLimit
+	}
+	if _, err := file.Seek(start, io.SeekStart); err != nil {
+		return "", info.Size(), false
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return "", start, false
+	}
+	offset = start + int64(len(data))
+	cut := 0
+	if start > 0 {
+		if i := bytes.IndexByte(data, '\n'); i >= 0 {
+			cut = i + 1
+		}
+	}
+	return string(data[cut:]), offset, start > 0
+}
+
+// handleLog 返回日志从 offset 字节开始的增量内容。
+//
+// 文件或 run 不存在时返回 200 加空正文，页面轮询时不会因此报错。
+func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	runID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/log/"), "/")
+	if runID == "" || strings.Contains(runID, "/") {
+		return
+	}
+	_, run, err := s.kernel.FindRun(runID)
+	if err != nil || run.Log == "" {
+		return
+	}
+	offset := int64(0)
+	if text := r.URL.Query().Get("offset"); text != "" {
+		if value, convErr := strconv.ParseInt(text, 10, 64); convErr == nil && value > 0 {
+			offset = value
+		}
+	}
+	file, err := os.Open(run.Log)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		return
+	}
+	if offset > info.Size() {
+		offset = info.Size()
+	}
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return
+	}
+	if _, err := io.Copy(w, file); err != nil {
+		log.Printf("expdeck web: 读取日志失败: %v", err)
+	}
 }
 
 // handleEdit 渲染编辑页，textarea 预填当前笔记。
@@ -282,13 +454,15 @@ func onlyGet(w http.ResponseWriter, r *http.Request) bool {
 
 // expView 是实验在页面上的展示投影。
 type expView struct {
-	Path        string
-	URL         string
-	EditURL     string
-	Branch      string
-	Hypothesis  string
-	Status      string
-	StatusClass string
+	Path         string
+	URL          string
+	EditURL      string
+	RunURL       string
+	InterruptURL string
+	Branch       string
+	Hypothesis   string
+	Status       string
+	StatusClass  string
 }
 
 // treeNode 是左侧树的展示节点；目录节点没有 Exp。
@@ -305,12 +479,17 @@ type indexData struct {
 }
 
 type detailData struct {
-	Tree     *treeNode
-	Exp      *expView
-	Note     string
-	Diff     string
-	DiffErr  string
-	Worktree string
+	Tree         *treeNode
+	Exp          *expView
+	Note         string
+	Diff         string
+	DiffErr      string
+	Worktree     string
+	Error        string
+	RunID        string
+	LogText      string
+	LogOffset    int64
+	LogTruncated bool
 }
 
 type editData struct {
@@ -324,13 +503,15 @@ type editData struct {
 
 func newExpView(exp *core.Experiment) *expView {
 	return &expView{
-		Path:        exp.PathString(),
-		URL:         experimentURL(exp.Path),
-		EditURL:     editExperimentURL(exp.Path),
-		Branch:      exp.Branch,
-		Hypothesis:  exp.Hypothesis,
-		Status:      exp.Status,
-		StatusClass: statusClass(exp.Status),
+		Path:         exp.PathString(),
+		URL:          experimentURL(exp.Path),
+		EditURL:      editExperimentURL(exp.Path),
+		RunURL:       experimentActionURL(exp.Path, "run"),
+		InterruptURL: experimentActionURL(exp.Path, "interrupt"),
+		Branch:       exp.Branch,
+		Hypothesis:   exp.Hypothesis,
+		Status:       exp.Status,
+		StatusClass:  statusClass(exp.Status),
 	}
 }
 
@@ -347,6 +528,11 @@ func experimentURL(segs []string) string {
 // editExperimentURL 生成编辑页地址：/e/<分段>/<分段>/edit。
 func editExperimentURL(segs []string) string {
 	return "/e/" + strings.Join(escapeSegs(segs), "/") + "/edit"
+}
+
+// experimentActionURL 生成运行动作地址：/e/<分段>/<分段>/<动作>。
+func experimentActionURL(segs []string, action string) string {
+	return "/e/" + strings.Join(escapeSegs(segs), "/") + "/" + action
 }
 
 // escapeSegs 逐段转义路径，斜杠保持为分隔符。

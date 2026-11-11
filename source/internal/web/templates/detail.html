@@ -1,4 +1,5 @@
 {{define "detail"}}{{template "page_head" .}}
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
 <h1 class="exp-path">{{.Exp.Path}}</h1>
 <p class="meta"><span class="dot dot-{{.Exp.StatusClass}}" title="{{.Exp.Status}}"></span>状态：{{.Exp.Status}}</p>
 <dl class="facts">
@@ -10,6 +11,44 @@
   <dd>{{if .Worktree}}已挂载：<code>{{.Worktree}}</code>{{else}}未挂载{{end}}</dd>
 </dl>
 <p class="actions"><a class="button" href="{{.Exp.EditURL}}">编辑笔记</a></p>
+<section class="section">
+  <h2>运行</h2>
+  {{if .RunID}}
+  <p class="run-status"><span class="dot dot-running"></span>run <code>{{.RunID}}</code> · 运行中</p>
+  <form class="run-form" method="post" action="{{.Exp.InterruptURL}}">
+    <button type="submit" class="danger">中断</button>
+  </form>
+  {{if .LogTruncated}}<p class="hint">日志较长，以下只显示末尾；新内容会自动追加。</p>{{end}}
+  <pre id="log" class="log" data-run="{{.RunID}}" data-offset="{{.LogOffset}}">{{.LogText}}</pre>
+  <script>
+  (function () {
+    var pre = document.getElementById('log');
+    if (!pre || !window.fetch) return;
+    var run = pre.getAttribute('data-run');
+    var offset = parseInt(pre.getAttribute('data-offset'), 10);
+    if (!run || isNaN(offset)) return;
+    function poll() {
+      fetch('/log/' + encodeURIComponent(run) + '?offset=' + offset, {cache: 'no-store'})
+        .then(function (res) { return res.ok ? res.text() : null; })
+        .then(function (text) {
+          if (!text) return;
+          offset += new TextEncoder().encode(text).length;
+          pre.textContent += text;
+          pre.scrollTop = pre.scrollHeight;
+        })
+        .catch(function () {});
+    }
+    poll();
+    setInterval(poll, 1500);
+  })();
+  </script>
+  {{else}}
+  <form class="run-form" method="post" action="{{.Exp.RunURL}}">
+    <button type="submit">运行</button>
+  </form>
+  <p class="hint">运行会在该实验的 worktree 里执行 exp.toml 里的 [run] cmd，日志实时显示在本页。</p>
+  {{end}}
+</section>
 <section class="section">
   <h2>笔记</h2>
   {{if .Note}}<pre class="note">{{.Note}}</pre>{{else}}<p class="empty">（还没有笔记）</p>{{end}}
