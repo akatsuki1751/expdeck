@@ -49,6 +49,12 @@ func (k *Kernel) StartRun(exp *Experiment, gpu int) (*Run, error) {
 		BootID:    BootID(),
 		StartedAt: time.Now().Format(time.RFC3339),
 	}
+	snapshot, base, err := k.Snapshot(exp, worktree)
+	if err != nil {
+		return nil, fmt.Errorf("%w: 打快照失败: %v", ErrConflict, err)
+	}
+	run.Snapshot = snapshot
+	run.Base = base
 	run.Log = k.LogPath(run.ID)
 	if err := k.SaveRun(exp, run); err != nil {
 		return nil, err
