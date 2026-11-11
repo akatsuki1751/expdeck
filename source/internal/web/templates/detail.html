@@ -1,0 +1,21 @@
+{{define "detail"}}{{template "page_head" .}}
+<h1 class="exp-path">{{.Exp.Path}}</h1>
+<p class="meta"><span class="dot dot-{{.Exp.StatusClass}}" title="{{.Exp.Status}}"></span>状态：{{.Exp.Status}}</p>
+<dl class="facts">
+  <dt>假设</dt>
+  <dd>{{.Exp.Hypothesis}}</dd>
+  <dt>分支</dt>
+  <dd><code>{{.Exp.Branch}}</code></dd>
+  <dt>worktree</dt>
+  <dd>{{if .Worktree}}已挂载：<code>{{.Worktree}}</code>{{else}}未挂载{{end}}</dd>
+</dl>
+<p class="actions"><a class="button" href="{{.Exp.EditURL}}">编辑笔记</a></p>
+<section class="section">
+  <h2>笔记</h2>
+  {{if .Note}}<pre class="note">{{.Note}}</pre>{{else}}<p class="empty">（还没有笔记）</p>{{end}}
+</section>
+<section class="section">
+  <h2>相对主干的改动</h2>
+  {{if .DiffErr}}<p class="error">无法计算改动：{{.DiffErr}}</p>{{else if .Diff}}<pre class="diff">{{.Diff}}</pre>{{else}}<p class="empty">（没有改动）</p>{{end}}
+</section>
+{{template "page_foot" .}}{{end}}
