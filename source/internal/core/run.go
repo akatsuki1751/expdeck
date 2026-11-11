@@ -35,6 +35,8 @@ type Run struct {
 	FinishedAt string   `json:"finished_at,omitempty"`
 	ExitCode   *int     `json:"exit_code,omitempty"`
 	Log        string   `json:"log"`
+	Snapshot   string   `json:"snapshot,omitempty"`
+	Base       string   `json:"base,omitempty"`
 	Metrics    map[string]float64 `json:"metrics,omitempty"`
 }
 

@@ -418,29 +418,68 @@ func renderNode(w io.Writer, node *core.Node, depth int) {
 // ---------- show ----------
 
 func (a *app) cmdShow(args []string) (result, error) {
-	pos, err := splitArgs(args, nil, nil)
+	showDiff := false
+	pos, err := splitArgs(args, nil, map[string]*bool{"diff": &showDiff})
 	if err != nil {
 		return result{}, fail(ExitUsage, "%v", err)
 	}
 	if len(pos) != 1 {
-		return result{}, fail(ExitUsage, "usage: exp show <path|id>")
+		return result{}, fail(ExitUsage, "usage: exp show <path|id> [--diff]")
 	}
 	kernel, err := core.Open(a.env.Dir)
 	if err != nil {
 		return result{}, fail(ExitInvalid, "%v", err)
 	}
-	exp, err := kernel.Find(pos[0])
-	if err != nil {
-		return result{}, err
+
+	if exp, findErr := kernel.Find(pos[0]); findErr == nil {
+		runs, runErr := kernel.ListRuns(exp)
+		if runErr != nil {
+			return result{}, runErr
+		}
+		return result{
+			data: map[string]any{"experiment": exp, "runs": runs},
+			human: func(w io.Writer) {
+				fmt.Fprintf(w, "%s\n", exp.PathString())
+				fmt.Fprintf(w, "  branch      %s\n", exp.Branch)
+				fmt.Fprintf(w, "  status      %s\n", exp.Status)
+				fmt.Fprintf(w, "  hypothesis  %s\n", exp.Hypothesis)
+				fmt.Fprintf(w, "  id          %s\n", exp.ID)
+				for _, run := range runs {
+					fmt.Fprintf(w, "  run         %s  %s\n", run.ID, run.Status)
+				}
+			},
+		}, nil
+	}
+
+	exp, run, runErr := kernel.FindRun(pos[0])
+	if runErr != nil {
+		return result{}, runErr
+	}
+	payload := map[string]any{"run": run, "experiment": exp.PathString()}
+	diff := ""
+	if showDiff {
+		diff, err = kernel.RunDiff(run)
+		if err != nil {
+			return result{}, fail(ExitConflict, "%v", err)
+		}
+		payload["diff"] = diff
 	}
 	return result{
-		data: map[string]any{"experiment": exp, "runs": []any{}},
+		data: payload,
 		human: func(w io.Writer) {
-			fmt.Fprintf(w, "%s\n", exp.PathString())
-			fmt.Fprintf(w, "  branch      %s\n", exp.Branch)
-			fmt.Fprintf(w, "  status      %s\n", exp.Status)
-			fmt.Fprintf(w, "  hypothesis  %s\n", exp.Hypothesis)
-			fmt.Fprintf(w, "  id          %s\n", exp.ID)
+			fmt.Fprintf(w, "run       %s\n", run.ID)
+			fmt.Fprintf(w, "exp       %s\n", exp.PathString())
+			fmt.Fprintf(w, "status    %s\n", run.Status)
+			fmt.Fprintf(w, "command   %s\n", run.Command)
+			if run.Snapshot != "" {
+				fmt.Fprintf(w, "snapshot  %s\n", run.Snapshot)
+			}
+			if run.ExitCode != nil {
+				fmt.Fprintf(w, "exit      %d\n", *run.ExitCode)
+			}
+			if showDiff {
+				fmt.Fprintf(w, "\n%s", diff)
+			}
 		},
 	}, nil
 }
