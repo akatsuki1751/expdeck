@@ -117,7 +117,32 @@ func (k *Kernel) Watch(runDir string) error {
 	_ = k.SaveRun(exp, &run)
 	_ = k.writeRegistry(&run)
 
-	waitErr := cmd.Wait()
+	config, _ := k.LoadConfig()
+	timeout := time.Duration(0)
+	if config != nil {
+		timeout = config.Timeout
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	var waitErr error
+	timedOut := false
+	if timeout > 0 {
+		select {
+		case waitErr = <-done:
+		case <-time.After(timeout):
+			timedOut = true
+			_ = records.WriteFile(filepath.Join(runDir, ".timeout"), []byte("1\n"))
+			_ = syscall.Kill(-run.PGID, syscall.SIGTERM)
+			select {
+			case waitErr = <-done:
+			case <-time.After(10 * time.Second):
+				_ = syscall.Kill(-run.PGID, syscall.SIGKILL)
+				waitErr = <-done
+			}
+		}
+	} else {
+		waitErr = <-done
+	}
 	exitCode := 0
 	if waitErr != nil {
 		if exitErr, ok := waitErr.(*exec.ExitError); ok {
@@ -126,9 +151,12 @@ func (k *Kernel) Watch(runDir string) error {
 			exitCode = -1
 		}
 	}
-	if _, statErr := os.Stat(filepath.Join(runDir, ".interrupt")); statErr == nil {
+	switch {
+	case timedOut:
+		run.Status = RunTimedOut
+	case hasMarker(runDir, ".interrupt"):
 		run.Status = RunInterrupted
-	} else {
+	default:
 		run.Status = RunFinished
 	}
 	run.ExitCode = &exitCode
@@ -195,6 +223,11 @@ func (k *Kernel) WaitRun(runID string, timeout time.Duration) (*Run, error) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func hasMarker(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
 }
 
 func (k *Kernel) writeRegistry(run *Run) error {

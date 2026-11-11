@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ProjectConfig 是 exp.toml 里本工具用得到的部分。
@@ -12,6 +13,7 @@ import (
 type ProjectConfig struct {
 	RunCmd    string
 	RunCwd    string
+	Timeout   time.Duration
 	Store     string
 	Artifacts []string
 	Keep      string
@@ -55,6 +57,10 @@ func (k *Kernel) LoadConfig() (*ProjectConfig, error) {
 				cfg.RunCmd = value
 			case "cwd":
 				cfg.RunCwd = value
+			case "timeout":
+				if duration, parseErr := time.ParseDuration(value); parseErr == nil {
+					cfg.Timeout = duration
+				}
 			}
 		case "store":
 			if key == "path" {

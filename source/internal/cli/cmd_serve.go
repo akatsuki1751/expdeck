@@ -3,6 +3,8 @@
 package cli
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +19,18 @@ import (
 type servePayload struct {
 	OK   bool `json:"ok"`
 	Data struct {
-		Addr string `json:"addr"`
+		Addr  string `json:"addr"`
+		Token string `json:"token"`
 	} `json:"data"`
+}
+
+// newServeToken 生成一次性访问令牌。
+func newServeToken() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(buf)
 }
 
 // cmdServe 启动网页服务并阻塞，直到监听失败或进程退出。
@@ -50,17 +62,22 @@ func (a *app) cmdServe(args []string) (result, error) {
 		return result{}, fail(ExitError, "监听 %s 失败: %v", addr, err)
 	}
 	actual := listener.Addr().String()
+	token := newServeToken()
+	server := web.New(kernel)
+	server.Token = token
+	address := "http://" + actual + "/?token=" + token
 	if a.json {
 		payload := servePayload{OK: true}
 		payload.Data.Addr = actual
+		payload.Data.Token = token
 		if err := json.NewEncoder(a.env.Stdout).Encode(payload); err != nil {
 			listener.Close()
 			return result{}, fail(ExitError, "写出服务地址失败: %v", err)
 		}
 	} else {
-		fmt.Fprintf(a.env.Stdout, "serving on http://%s\n", actual)
+		fmt.Fprintf(a.env.Stdout, "serving on %s\n", address)
 	}
-	if err := http.Serve(listener, web.New(kernel).Handler()); err != nil {
+	if err := http.Serve(listener, server.Handler()); err != nil {
 		return result{}, fail(ExitError, "网页服务退出: %v", err)
 	}
 	return result{}, nil
