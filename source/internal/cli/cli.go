@@ -101,6 +101,16 @@ func Run(env Env, args []string) int {
 		res, err = a.cmdRestore(rest)
 	case "serve":
 		res, err = a.cmdServe(rest)
+	case "run":
+		res, err = a.cmdRun(rest)
+	case "status":
+		res, err = a.cmdStatus(rest)
+	case "wait":
+		res, err = a.cmdWait(rest)
+	case "interrupt":
+		res, err = a.cmdInterrupt(rest)
+	case "__watch":
+		res, err = a.cmdWatch(rest)
 	default:
 		err = fail(ExitUsage, "unknown command %q", cmd)
 	}
