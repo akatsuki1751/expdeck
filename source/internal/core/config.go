@@ -10,9 +10,11 @@ import (
 // ProjectConfig 是 exp.toml 里本工具用得到的部分。
 // 只解析本工具生成的 TOML 子集：section + `key = "value"`。
 type ProjectConfig struct {
-	RunCmd string
-	RunCwd string
-	Store  string
+	RunCmd    string
+	RunCwd    string
+	Store     string
+	Artifacts []string
+	Keep      string
 }
 
 // LoadConfig 读取仓库根的 exp.toml。
@@ -58,7 +60,30 @@ func (k *Kernel) LoadConfig() (*ProjectConfig, error) {
 			if key == "path" {
 				cfg.Store = value
 			}
+		case "artifacts":
+			switch key {
+			case "glob":
+				cfg.Artifacts = parseStringArray(value)
+			case "keep":
+				cfg.Keep = value
+			}
 		}
 	}
 	return cfg, nil
+}
+
+// parseStringArray 解析 `["a", "b"]` 这种最小 TOML 数组。
+func parseStringArray(value string) []string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "[")
+	value = strings.TrimSuffix(value, "]")
+	var out []string
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		part = strings.Trim(part, `"'`)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

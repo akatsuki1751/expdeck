@@ -59,6 +59,9 @@ func (k *Kernel) StartRun(exp *Experiment, gpu int) (*Run, error) {
 	if err := k.SaveRun(exp, run); err != nil {
 		return nil, err
 	}
+	if err := k.WriteManifest(exp, run.ID, worktree); err != nil {
+		return nil, fmt.Errorf("%w: 记录产物清单失败: %v", ErrConflict, err)
+	}
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -130,6 +133,7 @@ func (k *Kernel) Watch(runDir string) error {
 	}
 	run.ExitCode = &exitCode
 	run.FinishedAt = time.Now().Format(time.RFC3339)
+	_ = k.CollectArtifacts(exp, &run)
 	_ = k.SaveRun(exp, &run)
 	_ = os.Remove(k.RegistryPath(run.ID))
 	return nil

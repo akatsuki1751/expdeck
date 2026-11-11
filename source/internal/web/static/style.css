@@ -144,6 +144,27 @@ h2 { margin: 0 0 .6rem; font-size: 1.05rem; }
 
 .actions { margin: 1.25rem 0; }
 
+.run-status { margin: 0 0 .8rem; color: var(--fg); }
+.run-status .dot { margin-right: .4rem; }
+.run-status code { font-weight: 600; }
+
+.run-form { margin: 0; }
+
+.log {
+  margin: .8rem 0 0;
+  max-height: 28rem;
+  overflow: auto;
+  padding: .9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+  font-size: .86rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .section { margin-top: 2rem; }
 
 pre.note,
@@ -185,6 +206,12 @@ button[type="submit"] {
   cursor: pointer;
 }
 button[type="submit"]:hover { background: #1a7f37; }
+
+button[type="submit"].danger {
+  border-color: var(--red);
+  background: var(--red);
+}
+button[type="submit"].danger:hover { background: #a40e26; }
 
 .note-form { display: flex; flex-direction: column; gap: .7rem; max-width: 900px; }
 
