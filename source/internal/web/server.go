@@ -51,7 +51,7 @@ func (s *Server) Handler() http.Handler {
 		log.Printf("expdeck web: 读取静态资源失败: %v", err)
 	}
 	mux.HandleFunc("/", s.handle)
-	return s.guard(mux)
+	return s.guard(s.actionLog(mux))
 }
 
 // guard 做两件事：令牌校验，以及拒绝跨站写请求。
@@ -136,6 +136,8 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		s.handleIndex(w, r)
 	case strings.HasPrefix(r.URL.Path, "/e/"):
 		s.handleExperiment(w, r)
+	case r.URL.Path == "/activity":
+		s.handleActivity(w, r)
 	case strings.HasPrefix(r.URL.Path, "/log/"):
 		if !onlyGet(w, r) {
 			return
@@ -227,6 +229,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tree := buildTreeView(core.BuildTree(exps), "")
+	s.markAttached(tree)
 	s.render(w, http.StatusOK, "index", indexData{
 		Project:      s.projectName(),
 		Tree:         tree,
@@ -260,14 +263,15 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		return
 	}
 	data := detailData{
-		Project:  s.projectName(),
-		Tree:     tree,
-		Exp:      newExpView(exp),
-		Note:     note,
-		Diff:     diff,
-		Worktree: worktree,
-		Attached: worktree != "",
-		Error:    r.URL.Query().Get("error"),
+		Project:   s.projectName(),
+		Tree:      tree,
+		Exp:       newExpView(exp),
+		Note:      note,
+		Diff:      diff,
+		DiffLines: parseDiff(diff),
+		Worktree:  worktree,
+		Attached:  worktree != "",
+		Error:     r.URL.Query().Get("error"),
 	}
 	if diffErr != nil {
 		data.DiffErr = diffErr.Error()
@@ -494,7 +498,9 @@ func (s *Server) viewTree(active string) (*treeNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	return buildTreeView(core.BuildTree(exps), active), nil
+	tree := buildTreeView(core.BuildTree(exps), active)
+	s.markAttached(tree)
+	return tree, nil
 }
 
 // worktreeOf 返回实验分支当前挂载的 worktree 目录；未挂载时返回空串。
@@ -557,6 +563,8 @@ type expView struct {
 	DetachURL    string
 	ConcludeURL  string
 	ReopenURL    string
+	RenameURL    string
+	Attached     bool
 	Branch       string
 	Hypothesis   string
 	Status       string
@@ -586,6 +594,7 @@ type detailData struct {
 	Exp          *expView
 	Note         string
 	Diff         string
+	DiffLines    []diffLine
 	DiffErr      string
 	Worktree     string
 	Attached     bool
@@ -625,6 +634,7 @@ func newExpView(exp *core.Experiment) *expView {
 		DetachURL:    experimentActionURL(exp.Path, "detach"),
 		ConcludeURL:  experimentActionURL(exp.Path, "conclude"),
 		ReopenURL:    experimentActionURL(exp.Path, "reopen"),
+		RenameURL:    experimentActionURL(exp.Path, "rename"),
 		Branch:       exp.Branch,
 		Hypothesis:   exp.Hypothesis,
 		Status:       exp.Status,
@@ -701,4 +711,26 @@ func flattenTree(node *treeNode) []*expView {
 	}
 	walk(node)
 	return out
+}
+
+// markAttached adds the worktree state to experiment menus.
+func (s *Server) markAttached(tree *treeNode) {
+	worktrees, err := s.kernel.Attached()
+	if err != nil {
+		return
+	}
+	branches := map[string]bool{}
+	for _, branch := range worktrees {
+		branches[branch] = true
+	}
+	var walk func(*treeNode)
+	walk = func(n *treeNode) {
+		if n.Exp != nil {
+			n.Exp.Attached = branches[n.Exp.Branch]
+		}
+		for _, child := range n.Children {
+			walk(child)
+		}
+	}
+	walk(tree)
 }

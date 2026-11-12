@@ -13,6 +13,7 @@ var expActions = map[string]bool{
 	"detach":   true,
 	"conclude": true,
 	"reopen":   true,
+	"rename":   true,
 }
 
 // splitAction 把 "a/b/detach" 拆成 (action="detach", ref="a/b")。
@@ -44,6 +45,8 @@ func (s *Server) handleExpAction(w http.ResponseWriter, r *http.Request, ref, ac
 		err = s.kernel.Conclude(exp, r.PostFormValue("decision"), r.PostFormValue("why"))
 	case "reopen":
 		err = s.kernel.Reopen(exp)
+	case "rename":
+		err = s.kernel.Rename(exp, r.PostFormValue("path"))
 	default:
 		s.notFound(w)
 		return
