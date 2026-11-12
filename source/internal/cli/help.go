@@ -41,6 +41,7 @@ const helpText = `ExpDeck — 用 git 分支管理实验，用普通文件记录
   show <exp|run> [--diff]       查看实验，或某个 run；--diff 显示该 run 自己的改动
   attach <exp> [dir]            把分支检出成工作树
   detach <exp>                  收回工作树（未提交改动会固化成 patch）
+  adopt <branch> [--why "..."]  把已经存在、但没登记的 exp/ 分支收编成实验
 
 记录
   note <exp> --text "..."       替换整篇笔记

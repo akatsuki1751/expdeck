@@ -94,6 +94,8 @@ func Run(env Env, args []string) int {
 		res, err = a.cmdNew(rest)
 	case "ls":
 		res, err = a.cmdList(rest)
+	case "adopt":
+		res, err = a.cmdAdopt(rest)
 	case "show":
 		res, err = a.cmdShow(rest)
 	case "doctor":
@@ -408,15 +410,25 @@ func (a *app) cmdList(args []string) (result, error) {
 	if err != nil {
 		return result{}, err
 	}
+	unregistered, err := kernel.Unregistered()
+	if err != nil {
+		return result{}, err
+	}
 	tree := core.BuildTree(exps)
 	return result{
-		data: map[string]any{"experiments": exps},
+		data: map[string]any{"experiments": exps, "unregistered": unregistered},
 		human: func(w io.Writer) {
 			if len(exps) == 0 {
 				fmt.Fprintln(w, "(no experiments)")
-				return
+			} else {
+				renderNode(w, tree, 0)
 			}
-			renderNode(w, tree, 0)
+			if len(unregistered) > 0 {
+				fmt.Fprintf(w, "\n%d 个 exp/ 分支还没有登记（用 exp adopt <分支> 收编）：\n", len(unregistered))
+				for _, branch := range unregistered {
+					fmt.Fprintf(w, "  %s\n", branch)
+				}
+			}
 		},
 	}, nil
 }
