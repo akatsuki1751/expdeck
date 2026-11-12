@@ -16,7 +16,9 @@ echo "  commit  $commit"
 echo "  output  $out/exp"
 
 cd "$here"
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$out/exp" ./cmd/exp
+CGO_ENABLED=0 go build -trimpath \
+  -ldflags="-s -w -X expdeck/internal/cli.version=${commit}" \
+  -o "$out/exp" ./cmd/exp
 
 size="$(du -h "$out/exp" | cut -f1)"
 sum="$(sha256sum "$out/exp" | cut -d' ' -f1)"
