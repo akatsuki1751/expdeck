@@ -24,20 +24,20 @@ const (
 
 // Run 是一次执行。
 type Run struct {
-	ID         string             `json:"id"`
-	Exp        string             `json:"exp"`
-	Status     string             `json:"status"`
-	Command    string             `json:"command"`
-	Cwd        string             `json:"cwd"`
-	PID        int                `json:"pid"`
-	PGID       int                `json:"pgid"`
-	BootID     string             `json:"boot_id"`
-	StartedAt  string             `json:"started_at"`
-	FinishedAt string             `json:"finished_at,omitempty"`
-	ExitCode   *int               `json:"exit_code,omitempty"`
-	Log        string             `json:"log"`
-	Snapshot   string             `json:"snapshot,omitempty"`
-	Base       string             `json:"base,omitempty"`
+	ID         string   `json:"id"`
+	Exp        string   `json:"exp"`
+	Status     string   `json:"status"`
+	Command    string   `json:"command"`
+	Cwd        string   `json:"cwd"`
+	PID        int      `json:"pid"`
+	PGID       int      `json:"pgid"`
+	BootID     string   `json:"boot_id"`
+	StartedAt  string   `json:"started_at"`
+	FinishedAt string   `json:"finished_at,omitempty"`
+	ExitCode   *int     `json:"exit_code,omitempty"`
+	Log        string   `json:"log"`
+	Snapshot   string   `json:"snapshot,omitempty"`
+	Base       string   `json:"base,omitempty"`
 	Metrics    map[string]float64 `json:"metrics,omitempty"`
 	Artifacts  []Artifact         `json:"artifacts,omitempty"`
 }
