@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -223,6 +224,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	tree := buildTreeView(core.BuildTree(exps), "")
 	s.render(w, http.StatusOK, "index", indexData{
+		Project:      s.projectName(),
 		Tree:         tree,
 		Experiments:  flattenTree(tree),
 		Unregistered: unregistered,
@@ -254,6 +256,7 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		return
 	}
 	data := detailData{
+		Project:  s.projectName(),
 		Tree:     tree,
 		Exp:      newExpView(exp),
 		Note:     note,
@@ -417,6 +420,7 @@ func (s *Server) handleEdit(w http.ResponseWriter, ref string) {
 	}
 	view := newExpView(exp)
 	s.render(w, http.StatusOK, "edit", editData{
+		Project: s.projectName(),
 		Tree:    tree,
 		Exp:     view,
 		Content: note,
@@ -564,6 +568,7 @@ type treeNode struct {
 }
 
 type indexData struct {
+	Project      string
 	Tree         *treeNode
 	Experiments  []*expView
 	Unregistered []string
@@ -572,6 +577,7 @@ type indexData struct {
 }
 
 type detailData struct {
+	Project      string
 	Tree         *treeNode
 	Exp          *expView
 	Note         string
@@ -587,12 +593,21 @@ type detailData struct {
 }
 
 type editData struct {
+	Project string
 	Tree    *treeNode
 	Exp     *expView
 	Content string
 	Version string
 	Action  string
 	Error   string
+}
+
+// projectName 是仓库目录名，展示在左栏顶部。
+func (s *Server) projectName() string {
+	if s.kernel == nil || s.kernel.Repo == nil {
+		return "ExpDeck"
+	}
+	return filepath.Base(s.kernel.Repo.Root)
 }
 
 func newExpView(exp *core.Experiment) *expView {

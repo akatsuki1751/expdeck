@@ -1,42 +1,23 @@
 {{define "detail"}}{{template "page_head" .}}
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-<h1 class="exp-path">{{.Exp.Path}}</h1>
-<p class="meta"><span class="dot dot-{{.Exp.StatusClass}}" title="{{.Exp.Status}}"></span>状态：{{.Exp.Status}}</p>
+<header class="main-head">
+  <div>
+    <h1>{{.Exp.Path}}</h1>
+    <p class="sub"><span class="dot dot-{{.Exp.StatusClass}}"></span> {{.Exp.Status}} · <code>{{.Exp.Branch}}</code></p>
+  </div>
+</header>
+{{if .Error}}<p class="banner banner-error" role="alert">{{.Error}}</p>{{end}}
+
 <dl class="facts">
   <dt>假设</dt>
   <dd>{{.Exp.Hypothesis}}</dd>
-  <dt>分支</dt>
-  <dd><code>{{.Exp.Branch}}</code></dd>
   <dt>worktree</dt>
-  <dd>{{if .Worktree}}已挂载：<code>{{.Worktree}}</code>{{else}}未挂载{{end}}</dd>
+  <dd>{{if .Worktree}}<code>{{.Worktree}}</code>{{else}}未挂载{{end}}</dd>
 </dl>
-<p class="actions">
-  <a class="button" href="{{.Exp.EditURL}}">编辑笔记</a>
-  {{if .Attached}}
-  <form method="post" action="{{.Exp.DetachURL}}" class="inline-form"><button type="submit">卸载 worktree</button></form>
-  {{else}}
-  <form method="post" action="{{.Exp.AttachURL}}" class="inline-form"><button type="submit">挂载 worktree</button></form>
-  {{end}}
-  {{if eq .Exp.Status "active"}}
-  <form method="post" action="{{.Exp.ConcludeURL}}" class="inline-form">
-    <select name="decision">
-      <option value="keep">保留</option>
-      <option value="abandon">放弃</option>
-    </select>
-    <input name="why" placeholder="结论与原因" required>
-    <button type="submit">结案</button>
-  </form>
-  {{else}}
-  <form method="post" action="{{.Exp.ReopenURL}}" class="inline-form"><button type="submit">重开</button></form>
-  {{end}}
-</p>
+
 <section class="section">
   <h2>运行</h2>
   {{if .RunID}}
-  <p class="run-status"><span class="dot dot-running"></span>run <code>{{.RunID}}</code> · 运行中</p>
-  <form class="run-form" method="post" action="{{.Exp.InterruptURL}}">
-    <button type="submit" class="danger">中断</button>
-  </form>
+  <p class="sub"><span class="dot dot-running"></span> run <code>{{.RunID}}</code> · 运行中</p>
   {{if .LogTruncated}}<p class="hint">日志较长，以下只显示末尾；新内容会自动追加。</p>{{end}}
   <pre id="log" class="log" data-run="{{.RunID}}" data-offset="{{.LogOffset}}">{{.LogText}}</pre>
   <script>
@@ -62,18 +43,65 @@
   })();
   </script>
   {{else}}
-  <form class="run-form" method="post" action="{{.Exp.RunURL}}">
-    <button type="submit">运行</button>
-  </form>
-  <p class="hint">运行会在该实验的 worktree 里执行 exp.toml 里的 [run] cmd，日志实时显示在本页。</p>
+  <p class="empty">当前没有在跑的 run。</p>
   {{end}}
 </section>
+
 <section class="section">
   <h2>笔记</h2>
   {{if .Note}}<pre class="note">{{.Note}}</pre>{{else}}<p class="empty">（还没有笔记）</p>{{end}}
 </section>
+
 <section class="section">
   <h2>相对主干的改动</h2>
   {{if .DiffErr}}<p class="error">无法计算改动：{{.DiffErr}}</p>{{else if .Diff}}<pre class="diff">{{.Diff}}</pre>{{else}}<p class="empty">（没有改动）</p>{{end}}
 </section>
+</main>
+<aside class="tools">
+  <h2 class="rail-title">操作</h2>
+
+  <div class="tool">
+    <h3>笔记</h3>
+    <a class="btn" href="{{.Exp.EditURL}}">编辑笔记</a>
+  </div>
+
+  <div class="tool">
+    <h3>worktree</h3>
+    {{if .Attached}}
+    <p class="hint">已挂载：<code>{{.Worktree}}</code></p>
+    <form method="post" action="{{.Exp.DetachURL}}"><button class="btn" type="submit">卸载 worktree</button></form>
+    {{else}}
+    <p class="hint">未挂载，无法运行。</p>
+    <form method="post" action="{{.Exp.AttachURL}}"><button class="btn" type="submit">挂载 worktree</button></form>
+    {{end}}
+  </div>
+
+  <div class="tool">
+    <h3>运行</h3>
+    {{if .RunID}}
+    <form method="post" action="{{.Exp.InterruptURL}}"><button class="btn btn-danger" type="submit">中断</button></form>
+    {{else}}
+    <form method="post" action="{{.Exp.RunURL}}"><button class="btn btn-primary" type="submit">运行</button></form>
+    <p class="hint">执行 exp.toml 里的 [run] cmd，日志实时显示在左侧。</p>
+    {{end}}
+  </div>
+
+  <div class="tool">
+    <h3>结案</h3>
+    {{if eq .Exp.Status "active"}}
+    <form method="post" action="{{.Exp.ConcludeURL}}">
+      <label>结论
+        <select name="decision">
+          <option value="keep">保留</option>
+          <option value="abandon">放弃</option>
+        </select>
+      </label>
+      <label>原因<input name="why" placeholder="为什么" required></label>
+      <button class="btn" type="submit">结案</button>
+    </form>
+    {{else}}
+    <form method="post" action="{{.Exp.ReopenURL}}"><button class="btn" type="submit">重开</button></form>
+    {{end}}
+  </div>
+</aside>
 {{template "page_foot" .}}{{end}}
