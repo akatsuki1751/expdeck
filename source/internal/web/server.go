@@ -1,4 +1,4 @@
-// Package web 是 ExpDeck 的浏览与笔记编辑网页：只用标准库，不引前端框架。
+// Package web 是 ExpDeck 的浏览与笔记编辑网页：Go 服务端渲染，HTMX 增强交互。
 //
 // 页面全部由服务端渲染；只读页面在没有 JavaScript 时也能完整阅读。
 package web
@@ -105,6 +105,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 
 // handle 按路径分派：/ 是列表，/e/ 之下是详情与编辑。
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	// Boosted forms follow redirects; keep the visible URL aligned with the rendered page.
+	if r.Method == http.MethodGet && r.Header.Get("HX-Boosted") == "true" {
+		w.Header().Set("HX-Push-Url", r.URL.RequestURI())
+	}
 	if r.Method == http.MethodPost {
 		switch r.URL.Path {
 		case "/new":

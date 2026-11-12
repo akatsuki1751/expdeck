@@ -1,151 +1,27 @@
 {{define "page_head"}}<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ExpDeck · {{.Project}}</title>
-<link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-<div class="app" id="app">
-  <aside class="rail">
-    <div class="brand">
-      <span class="brand-mark">E</span>
-      <span class="brand-name">ExpDeck</span>
-      <button class="rail-toggle" id="railToggle" type="button" title="收起 / 展开侧栏" aria-label="收起侧栏" aria-expanded="true">«</button>
-    </div>
-    <div class="brand-sub">{{.Project}}</div>
-    <div>
-      <h2 class="rail-title">实验树</h2>
-      {{if .Tree.Children}}{{template "tree" .Tree}}{{else}}<p class="empty">还没有实验</p>{{end}}
-    </div>
-    <div class="rail-foot">
-      <span class="legend"><i class="dot dot-active"></i>进行中</span>
-      <span class="legend"><i class="dot dot-concluded"></i>已结案</span>
-      <span class="legend"><i class="dot dot-abandoned"></i>已放弃</span>
-    </div>
-  </aside>
-  <main class="main">
-{{end}}
-
-{{define "page_foot"}}</div>
-<script>
-(function () {
-  var app = document.getElementById('app');
-  var btn = document.getElementById('railToggle');
-  if (!app || !btn) return;
-  var key = 'exp.rail.collapsed';
-  function apply(collapsed) {
-    app.classList.toggle('rail-collapsed', collapsed);
-    btn.textContent = collapsed ? '»' : '«';
-    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-  }
-  var saved = null;
-  try { saved = window.localStorage.getItem(key); } catch (e) {}
-  apply(saved === '1');
-  btn.addEventListener('click', function () {
-    var collapsed = !app.classList.contains('rail-collapsed');
-    apply(collapsed);
-    try { window.localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
-  });
-})();
-</script>
-</body>
-</html>
-{{end}}
-
-{{define "tree"}}{{if .}}<ul class="tree">
-{{- range .Children}}
-  <li class="tree-item">
-    {{- if .Exp}}
-    <a class="tree-label{{if .Active}} is-active{{end}}" href="{{.Exp.URL}}"><span class="dot dot-{{.Exp.StatusClass}}" title="{{.Exp.Status}}"></span>{{.Name}}</a>
-    {{- else}}
-    <span class="tree-dir">{{.Name}}/</span>
-    {{- end}}
-    {{- if .Children}}{{template "tree" .}}{{end}}
-  </li>
-{{- end}}
-</ul>{{end}}{{end}}
-
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ExpDeck · {{.Project}}</title><link rel="stylesheet" href="/static/style.css"><script src="/static/htmx.min.js" defer></script><script src="/static/app.js" defer></script></head>
+<body hx-boost="true" hx-target="#app" hx-select="#app" hx-swap="outerHTML show:window:top">
+<div class="app" id="app"><aside class="rail" aria-label="实验导航">
+  <div class="brand-row"><a class="brand" href="/" aria-label="ExpDeck 首页"><span class="brand-mark">E<span>·</span></span><span><strong>ExpDeck</strong><small>EXPERIMENT WORKSPACE</small></span></a><button class="rail-toggle" type="button" aria-label="收起侧栏" aria-expanded="true" title="收起 / 展开侧栏">‹</button></div>
+  <div class="project-label"><span class="project-icon">▦</span><span class="project-name"><small>当前项目</small><strong>{{.Project}}</strong></span></div>
+  <a href="/" class="nav-overview"><span>▤</span> 实验列表 <span class="nav-arrow">↗</span></a>
+  <div class="rail-section"><div class="rail-heading"><span>实验目录</span><span class="tree-count">TREE</span></div>{{if .Tree.Children}}{{template "tree" .Tree}}{{else}}<p class="rail-empty">暂无实验<br>从右侧创建第一条实验。</p>{{end}}</div>
+  <div class="rail-foot"><span class="online-dot"></span>本地工作区 <span class="rail-foot-right">EXPDECK</span></div>
+</aside><main class="main">{{end}}
+{{define "page_foot"}}</div></body></html>{{end}}
+{{define "tree"}}{{if .}}<ul class="tree">{{range .Children}}<li class="tree-item">{{if .Exp}}<a class="tree-label{{if .Active}} is-active{{end}}" href="{{.Exp.URL}}"><span class="dot dot-{{.Exp.StatusClass}}" title="{{.Exp.Status}}"></span><span>{{.Name}}</span></a>{{else}}<span class="tree-dir"><span class="folder-icon">▱</span>{{.Name}}</span>{{end}}{{if .Children}}{{template "tree" .}}{{end}}</li>{{end}}</ul>{{end}}{{end}}
 {{define "index"}}{{template "page_head" .}}
-<header class="main-head">
-  <div>
-    <h1>实验列表</h1>
-    <p class="sub">{{.Project}} · 共 {{len .Experiments}} 个实验</p>
-  </div>
-</header>
-{{if .Error}}<p class="banner banner-error" role="alert">{{.Error}}</p>{{end}}
-{{if .Notice}}<p class="banner">{{.Notice}}</p>{{end}}
-
-{{if .Experiments}}
-<table class="exp-table">
-  <thead>
-    <tr><th scope="col">路径</th><th scope="col">假设</th><th scope="col">状态</th></tr>
-  </thead>
-  <tbody>
-    {{range .Experiments}}
-    <tr>
-      <td class="path"><a href="{{.URL}}">{{.Path}}</a></td>
-      <td class="hypothesis">{{.Hypothesis}}</td>
-      <td class="status-cell"><span class="dot dot-{{.StatusClass}}" title="{{.Status}}"></span>{{.Status}}</td>
-    </tr>
-    {{end}}
-  </tbody>
-</table>
-{{else}}
-<p class="empty">还没有任何实验。用右侧的「新建实验」创建第一个。</p>
-{{end}}
-
-{{if .Unregistered}}
-<section class="section">
-  <h2>未登记的分支</h2>
-  <ul class="unregistered">
-    {{range .Unregistered}}
-    <li>
-      <code>{{.}}</code>
-      <form method="post" action="/adopt" class="inline-form">
-        <input type="hidden" name="branch" value="{{.}}">
-        <button class="btn" type="submit">收编</button>
-      </form>
-    </li>
-    {{end}}
-  </ul>
-</section>
-{{end}}
-</main>
-<aside class="tools">
-  <h2 class="rail-title">开始</h2>
-
-  <form class="tool" method="post" action="/new">
-    <h3>新建实验</h3>
-    <label>路径<input name="path" placeholder="sensitive/lr_1e4" required></label>
-    <label>假设<input name="why" placeholder="为什么做这个实验" required></label>
-    <button class="btn btn-primary" type="submit">创建</button>
-  </form>
-
-  <form class="tool" method="post" action="/adopt">
-    <h3>收编分支</h3>
-    <label>分支<input name="branch" placeholder="exp/ablation/sigreg" required></label>
-    <label>假设<input name="why" placeholder="可以留空"></label>
-    <button class="btn" type="submit">收编</button>
-  </form>
-
-  <form class="tool" method="post" action="/backup">
-    <h3>备份</h3>
-    <p class="hint">把记录提交成 book 分支。</p>
-    <button class="btn" type="submit">备份记录</button>
-  </form>
-
-  <form class="tool" method="post" action="/restore">
-    <h3>恢复</h3>
-    <label class="inline"><input type="checkbox" name="force" value="1">覆盖已有记录</label>
-    <button class="btn" type="submit">从 book 恢复</button>
-  </form>
-
-  <form class="tool" method="post" action="/gc">
-    <h3>清理产物</h3>
-    <p class="hint">删除没有任何 run 引用的产物。</p>
-    <button class="btn" type="submit">清理</button>
-  </form>
-</aside>
-{{template "page_foot" .}}{{end}}
+<div class="topline"><span>工作区 <span class="crumb-sep">/</span> 实验列表</span><span class="topline-meta">EXPERIMENTS</span></div>
+<header class="main-head"><div><p class="eyebrow">YOUR RESEARCH, ORGANIZED</p><h1>实验列表<span class="heading-dot">.</span></h1><p class="sub">记录每一次尝试，让想法与结论都有迹可循。</p></div><a href="#create-experiment" class="btn btn-primary head-action">＋ 新建实验</a></header>
+{{if .Error}}<p class="banner banner-error" role="alert">{{.Error}}</p>{{end}}{{if .Notice}}<p class="banner" role="status">{{.Notice}}</p>{{end}}
+<div class="summary-strip"><div><span class="summary-number">{{len .Experiments}}</span><span class="summary-label">已登记实验</span></div><div class="summary-divider"></div><div><span class="summary-number">{{len .Unregistered}}</span><span class="summary-label">待登记分支</span></div><div class="summary-note">从假设出发，记录过程与结论 <span>↗</span></div></div>
+<section class="list-section"><div class="section-heading"><div><p class="eyebrow">EXPERIMENTS</p><h2>所有实验</h2></div><span class="section-count">{{len .Experiments}} 项</span></div>
+{{if .Experiments}}<div class="table-wrap"><table class="exp-table"><thead><tr><th scope="col">实验路径</th><th scope="col">假设</th><th scope="col">状态</th><th scope="col"><span class="sr-only">查看</span></th></tr></thead><tbody>{{range .Experiments}}<tr><td class="path"><a href="{{.URL}}"><span class="row-icon">◈</span><span>{{.Path}}</span></a></td><td class="hypothesis">{{.Hypothesis}}</td><td><span class="status-pill"><span class="dot dot-{{.StatusClass}}"></span>{{.Status}}</span></td><td class="row-arrow"><a href="{{.URL}}" aria-label="查看 {{.Path}}">↗</a></td></tr>{{end}}</tbody></table></div>{{else}}<div class="empty-state"><span class="empty-icon">◈</span><h3>从一个问题开始</h3><p>创建实验并写下假设，之后的每一步都有地方记录。</p><a href="#create-experiment" class="text-link">创建第一个实验 <span>→</span></a></div>{{end}}</section>
+{{if .Unregistered}}<section class="section"><div class="section-heading"><div><p class="eyebrow">NEEDS ATTENTION</p><h2>未登记的分支</h2></div></div><ul class="unregistered">{{range .Unregistered}}<li><code>{{.}}</code><form method="post" action="/adopt" class="inline-form"><input type="hidden" name="branch" value="{{.}}"><button class="btn btn-small" type="submit">收编</button></form></li>{{end}}</ul></section>{{end}}
+</main><aside class="tools"><div class="tools-head"><p class="eyebrow">WORKSPACE</p><h2>实验工作台</h2><p>从一个清晰的假设开始。</p></div>
+<form id="create-experiment" class="tool create-tool" method="post" action="/new"><div class="tool-title"><span class="tool-number">01</span><div><h3>新建实验</h3><p class="hint">创建分支并登记实验</p></div></div><label>实验路径<input name="path" placeholder="例如 ablation/sigreg" required></label><label>实验假设<textarea name="why" rows="3" placeholder="你想验证什么？" required></textarea></label><button class="btn btn-primary btn-block" type="submit">创建实验 <span>↗</span></button></form>
+<div class="tools-subhead">项目维护 <span>MANAGE</span></div>
+<details class="tool-disclosure"><summary>收编已有分支 <span>＋</span></summary><form method="post" action="/adopt"><label>分支<input name="branch" placeholder="exp/ablation/sigreg" required></label><label>假设<input name="why" placeholder="可选"></label><button class="btn" type="submit">收编分支</button></form></details>
+<details class="tool-disclosure"><summary>备份与恢复 <span>＋</span></summary><div class="disclosure-content"><p class="hint">将记录提交到 book 分支，或从中恢复。</p><form method="post" action="/backup"><button class="btn" type="submit">备份记录</button></form><form method="post" action="/restore"><label class="check"><input type="checkbox" name="force" value="1">覆盖已有记录</label><button class="btn" type="submit">从 book 恢复</button></form></div></details>
+<details class="tool-disclosure"><summary>清理产物 <span>＋</span></summary><form method="post" action="/gc"><p class="hint">删除没有任何 run 引用的产物。</p><button class="btn" type="submit" onclick="return confirm('确定清理未被引用的产物吗？')">清理产物</button></form></details><div class="tools-footer">EXPDECK <span>记录 · 回顾 · 继续</span></div></aside>{{template "page_foot" .}}{{end}}
