@@ -66,6 +66,34 @@ a { color: inherit; }
   margin-top: -10px;
 }
 
+.rail-toggle {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rail-toggle:hover { background: #f0f0f2; color: var(--text); }
+
+/* 收起侧栏：只留品牌方块与展开按钮。 */
+.app.rail-collapsed { grid-template-columns: 52px minmax(0, 1fr) 300px; }
+.app.rail-collapsed .rail { padding: 12px 8px; align-items: center; }
+.app.rail-collapsed .brand { flex-direction: column; gap: 8px; }
+.app.rail-collapsed .rail-toggle { margin: 0; }
+.app.rail-collapsed .brand-name,
+.app.rail-collapsed .brand-sub,
+.app.rail-collapsed .rail-title,
+.app.rail-collapsed .rail-foot,
+.app.rail-collapsed .rail > div:not(.brand) { display: none; }
+
 .rail-title {
   margin: 0 0 6px;
   padding: 0 6px;

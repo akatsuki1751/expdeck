@@ -7,9 +7,13 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div class="app">
+<div class="app" id="app">
   <aside class="rail">
-    <div class="brand"><span class="brand-mark">E</span>ExpDeck</div>
+    <div class="brand">
+      <span class="brand-mark">E</span>
+      <span class="brand-name">ExpDeck</span>
+      <button class="rail-toggle" id="railToggle" type="button" title="收起 / 展开侧栏" aria-label="收起侧栏" aria-expanded="true">«</button>
+    </div>
     <div class="brand-sub">{{.Project}}</div>
     <div>
       <h2 class="rail-title">实验树</h2>
@@ -25,6 +29,27 @@
 {{end}}
 
 {{define "page_foot"}}</div>
+<script>
+(function () {
+  var app = document.getElementById('app');
+  var btn = document.getElementById('railToggle');
+  if (!app || !btn) return;
+  var key = 'exp.rail.collapsed';
+  function apply(collapsed) {
+    app.classList.toggle('rail-collapsed', collapsed);
+    btn.textContent = collapsed ? '»' : '«';
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+  var saved = null;
+  try { saved = window.localStorage.getItem(key); } catch (e) {}
+  apply(saved === '1');
+  btn.addEventListener('click', function () {
+    var collapsed = !app.classList.contains('rail-collapsed');
+    apply(collapsed);
+    try { window.localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
+  });
+})();
+</script>
 </body>
 </html>
 {{end}}
