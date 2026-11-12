@@ -51,7 +51,11 @@ type app struct {
 	env  Env
 	json bool
 	dry  bool
+	help bool
 }
+
+// version 由构建脚本用 -ldflags 注入。
+var version = "dev"
 
 // Run 执行一次命令并返回进程退出码。
 func Run(env Env, args []string) int {
@@ -69,10 +73,19 @@ func Run(env Env, args []string) int {
 	if err != nil {
 		return a.finish(result{}, err)
 	}
+	if a.help {
+		printHelp(a.env.Stdout)
+		return ExitOK
+	}
 	if len(rest) == 0 {
-		return a.finish(result{}, fail(ExitUsage, "usage: exp <init|new|ls|show> [flags]"))
+		printHelp(a.env.Stderr)
+		return ExitUsage
 	}
 	cmd, rest := rest[0], rest[1:]
+	if cmd == "help" {
+		printHelp(a.env.Stdout)
+		return ExitOK
+	}
 	var res result
 	switch cmd {
 	case "init":
@@ -87,6 +100,8 @@ func Run(env Env, args []string) int {
 		res, err = a.cmdDoctor(rest)
 	case "gc":
 		res, err = a.cmdGC(rest)
+	case "version":
+		res, err = a.cmdVersion(rest)
 	case "note":
 		res, err = a.cmdNote(rest)
 	case "open":
@@ -130,7 +145,7 @@ func (a *app) parseGlobals(args []string) ([]string, error) {
 		case "--dry-run":
 			a.dry = true
 		case "-h", "--help":
-			return nil, fail(ExitUsage, "usage: exp <init|new|ls|show> [--json] [--dry-run]")
+			a.help = true
 		default:
 			rest = append(rest, arg)
 		}
