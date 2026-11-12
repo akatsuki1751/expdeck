@@ -573,6 +573,7 @@ type expView struct {
 
 // treeNode 是左侧树的展示节点；目录节点没有 Exp。
 type treeNode struct {
+	Path     string
 	Name     string
 	Exp      *expView
 	Active   bool
@@ -686,7 +687,7 @@ func statusClass(status string) string {
 
 // buildTreeView 把 core 的树转换成展示节点。
 func buildTreeView(node *core.Node, active string) *treeNode {
-	view := &treeNode{Name: node.Name}
+	view := &treeNode{Name: node.Name, Path: strings.Join(node.Path, "/")}
 	for _, child := range node.Children {
 		view.Children = append(view.Children, buildTreeView(child, active))
 	}

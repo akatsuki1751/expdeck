@@ -39,7 +39,7 @@
     timer = setInterval(poll, 1500);
   }
   document.addEventListener('DOMContentLoaded', function () { restoreRail(); startLog(); });
-  document.addEventListener('htmx:afterSwap', function () { restoreRail(); startLog(); });
+  document.addEventListener('htmx:load', function () { restoreRail(); startLog(); });
   document.addEventListener('htmx:beforeSwap', function (event) {
     if (event.detail.xhr.status === 409) { event.detail.shouldSwap = true; event.detail.isError = false; }
   });
