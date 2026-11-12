@@ -10,6 +10,11 @@ go build -o exp ./cmd/exp
 
 单二进制，无外部依赖，只用 Go 标准库和 `git` 命令行。
 
+```sh
+exp --help          # 全部命令
+exp version         # 构建时注入的 commit
+```
+
 ## 快速开始
 
 ```sh
