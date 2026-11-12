@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ExpDeck</title>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/extra.css">
 </head>
 <body>
 <header class="topbar">
@@ -43,6 +44,55 @@
 {{define "index"}}{{template "page_head" .}}
 <h1>实验列表</h1>
 <p class="lead">共 {{len .Experiments}} 个实验。状态点：灰色为进行中，绿色为已结案，红色为已放弃。</p>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}
+
+<section class="cards">
+  <form class="card" method="post" action="/new">
+    <h2>新建实验</h2>
+    <label>路径 <input name="path" placeholder="sensitive/lr_1e4" required></label>
+    <label>假设 <input name="why" placeholder="为什么做这个实验" required></label>
+    <button type="submit">创建</button>
+  </form>
+  <form class="card" method="post" action="/adopt">
+    <h2>收编已有分支</h2>
+    <label>分支 <input name="branch" placeholder="exp/ablation/sigreg" required></label>
+    <label>假设 <input name="why" placeholder="可以留空"></label>
+    <button type="submit">收编</button>
+  </form>
+  <form class="card" method="post" action="/backup">
+    <h2>备份</h2>
+    <p class="hint">把记录提交成 book 分支。</p>
+    <button type="submit">备份</button>
+  </form>
+  <form class="card" method="post" action="/restore">
+    <h2>恢复</h2>
+    <label class="inline"><input type="checkbox" name="force" value="1"> 覆盖已有记录</label>
+    <button type="submit">从 book 恢复</button>
+  </form>
+  <form class="card" method="post" action="/gc">
+    <h2>清理产物</h2>
+    <p class="hint">删除没有任何 run 引用的产物。</p>
+    <button type="submit">清理</button>
+  </form>
+</section>
+
+{{if .Unregistered}}
+<section class="section">
+  <h2>未登记的分支</h2>
+  <ul class="unregistered">
+    {{range .Unregistered}}
+    <li>
+      <code>{{.}}</code>
+      <form method="post" action="/adopt" class="inline-form">
+        <input type="hidden" name="branch" value="{{.}}">
+        <button type="submit">收编</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
 {{if .Experiments}}
 <table class="exp-table">
   <thead>

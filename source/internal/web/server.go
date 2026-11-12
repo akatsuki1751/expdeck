@@ -104,12 +104,31 @@ func (s *Server) guard(next http.Handler) http.Handler {
 
 // handle 按路径分派：/ 是列表，/e/ 之下是详情与编辑。
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		switch r.URL.Path {
+		case "/new":
+			s.handleNew(w, r)
+			return
+		case "/adopt":
+			s.handleAdopt(w, r)
+			return
+		case "/backup":
+			s.handleBackup(w, r)
+			return
+		case "/restore":
+			s.handleRestore(w, r)
+			return
+		case "/gc":
+			s.handleGC(w, r)
+			return
+		}
+	}
 	switch {
 	case r.URL.Path == "/":
 		if !onlyGet(w, r) {
 			return
 		}
-		s.handleIndex(w)
+		s.handleIndex(w, r)
 	case strings.HasPrefix(r.URL.Path, "/e/"):
 		s.handleExperiment(w, r)
 	case strings.HasPrefix(r.URL.Path, "/log/"):
@@ -179,6 +198,10 @@ func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "405 方法不允许", http.StatusMethodNotAllowed)
 		}
 	default:
+		if action, ref, ok := splitAction(rest); ok && r.Method == http.MethodPost {
+			s.handleExpAction(w, r, ref, action)
+			return
+		}
 		if !onlyGet(w, r) {
 			return
 		}
@@ -187,16 +210,24 @@ func (s *Server) handleExperiment(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleIndex 渲染实验列表：左侧树、右侧铺平的实验清单。
-func (s *Server) handleIndex(w http.ResponseWriter) {
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	exps, err := s.kernel.List()
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	unregistered, err := s.kernel.Unregistered()
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
 	tree := buildTreeView(core.BuildTree(exps), "")
 	s.render(w, http.StatusOK, "index", indexData{
-		Tree:        tree,
-		Experiments: flattenTree(tree),
+		Tree:         tree,
+		Experiments:  flattenTree(tree),
+		Unregistered: unregistered,
+		Error:        r.URL.Query().Get("error"),
+		Notice:       r.URL.Query().Get("ok"),
 	})
 }
 
@@ -228,6 +259,7 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		Note:     note,
 		Diff:     diff,
 		Worktree: worktree,
+		Attached: worktree != "",
 		Error:    r.URL.Query().Get("error"),
 	}
 	if diffErr != nil {
@@ -513,6 +545,10 @@ type expView struct {
 	EditURL      string
 	RunURL       string
 	InterruptURL string
+	AttachURL    string
+	DetachURL    string
+	ConcludeURL  string
+	ReopenURL    string
 	Branch       string
 	Hypothesis   string
 	Status       string
@@ -528,8 +564,11 @@ type treeNode struct {
 }
 
 type indexData struct {
-	Tree        *treeNode
-	Experiments []*expView
+	Tree         *treeNode
+	Experiments  []*expView
+	Unregistered []string
+	Error        string
+	Notice       string
 }
 
 type detailData struct {
@@ -539,6 +578,7 @@ type detailData struct {
 	Diff         string
 	DiffErr      string
 	Worktree     string
+	Attached     bool
 	Error        string
 	RunID        string
 	LogText      string
@@ -562,6 +602,10 @@ func newExpView(exp *core.Experiment) *expView {
 		EditURL:      editExperimentURL(exp.Path),
 		RunURL:       experimentActionURL(exp.Path, "run"),
 		InterruptURL: experimentActionURL(exp.Path, "interrupt"),
+		AttachURL:    experimentActionURL(exp.Path, "attach"),
+		DetachURL:    experimentActionURL(exp.Path, "detach"),
+		ConcludeURL:  experimentActionURL(exp.Path, "conclude"),
+		ReopenURL:    experimentActionURL(exp.Path, "reopen"),
 		Branch:       exp.Branch,
 		Hypothesis:   exp.Hypothesis,
 		Status:       exp.Status,
