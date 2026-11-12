@@ -1,15 +1,31 @@
 {{define "edit"}}{{template "page_head" .}}
-<h1>编辑笔记</h1>
-<p class="exp-path">{{.Exp.Path}}</p>
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+<header class="main-head">
+  <div>
+    <h1>编辑笔记</h1>
+    <p class="sub">{{.Exp.Path}}</p>
+  </div>
+</header>
+{{if .Error}}<p class="banner banner-error" role="alert">{{.Error}}</p>{{end}}
+
 <form class="note-form" method="post" action="{{.Action}}">
   <input type="hidden" name="version" value="{{.Version}}">
   <label class="sr-only" for="content">笔记内容（Markdown 原文）</label>
-  <textarea id="content" name="content" rows="24" spellcheck="false">{{.Content}}</textarea>
-  <div class="form-actions">
-    <button type="submit">保存</button>
-    <a class="button secondary" href="{{.Exp.URL}}">取消</a>
+  <textarea id="content" name="content" rows="20" spellcheck="false">{{.Content}}</textarea>
+  <div class="tool-actions">
+    <button class="btn btn-primary" type="submit">保存</button>
+    <a class="btn" href="{{.Exp.URL}}">取消</a>
   </div>
 </form>
-<p class="hint">笔记按 Markdown 原文保存，网页只做纯文本展示，不渲染。</p>
+</main>
+<aside class="tools">
+  <h2 class="rail-title">说明</h2>
+  <div class="tool">
+    <h3>纯文本</h3>
+    <p class="hint">笔记按 Markdown 原文保存，页面只做纯文本展示。</p>
+  </div>
+  <div class="tool">
+    <h3>版本保护</h3>
+    <p class="hint">保存会带上打开时的版本。期间被别人（或 agent）改过，保存会被拒绝，而不是整篇覆盖。</p>
+  </div>
+</aside>
 {{template "page_foot" .}}{{end}}
