@@ -13,13 +13,25 @@
     document.documentElement.style.setProperty('--right-width', right + 'px');
     var closed = get(keys.rightClosed, '0') === '1'; app.classList.toggle('right-collapsed', closed);
     var button = app.querySelector('[data-toggle-right]');
-    if (button) { button.textContent = closed ? '‹' : '›'; button.setAttribute('aria-expanded',String(!closed)); button.setAttribute('aria-label',closed ? '展开右侧栏' : '收起右侧栏'); }
+    if (button) { button.setAttribute('aria-expanded',String(!closed)); button.setAttribute('aria-label',closed ? '展开右侧栏' : '收起右侧栏'); button.title = closed ? '展开右侧栏' : '收起右侧栏'; }
     var theme = get(keys.theme, 'light') === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = theme;
     var radio = app.querySelector('input[name="theme"][value="' + theme + '"]'); if (radio) radio.checked = true;
   }
-  document.addEventListener('DOMContentLoaded', apply);
-  document.addEventListener('htmx:afterSwap', apply);
+  function restoreTree() {
+    var states; try { states=JSON.parse(get('exp.tree.folders','{}')); } catch (_) { states={}; }
+    document.querySelectorAll('.tree-branch[data-tree-path]').forEach(function (folder) {
+      var path=folder.dataset.treePath; if (Object.prototype.hasOwnProperty.call(states,path)) folder.open=!!states[path];
+    });
+  }
+  document.addEventListener('click', function (event) {
+    var summary=event.target.closest('.tree-branch > summary'); if (!summary) return;
+    var folder=summary.parentElement;
+    var states; try { states=JSON.parse(get('exp.tree.folders','{}')); } catch (_) { states={}; }
+    states[folder.dataset.treePath]=!folder.open; put('exp.tree.folders',JSON.stringify(states));
+  });
+  document.addEventListener('DOMContentLoaded', function () { apply(); restoreTree(); });
+  document.addEventListener('htmx:load', function () { apply(); restoreTree(); });
   window.addEventListener('resize', apply);
   document.addEventListener('change', function (event) {
     if (event.target.matches('input[name="theme"]')) { put(keys.theme, event.target.value); apply(); }
@@ -27,6 +39,8 @@
   document.addEventListener('click', function (event) {
     var target = event.target;
     if (target.closest('[data-toggle-right]')) { var app=document.getElementById('app'); put(keys.rightClosed, app.classList.contains('right-collapsed') ? '0' : '1'); apply(); }
+    var open=target.closest('[data-open-dialog]'); if (open) { var toOpen=document.getElementById(open.dataset.openDialog); var current=open.closest('details.menu'); if(current)current.open=false; if(toOpen)toOpen.showModal(); }
+    var conclude=target.closest('[data-conclude-url]'); if(conclude) { var form=document.getElementById('conclude-form'), dialog=document.getElementById('conclude-dialog'); form.action=conclude.dataset.concludeUrl; var menu=conclude.closest('details'); if(menu)menu.open=false; dialog.showModal(); }
     if (target.closest('[data-open-settings]')) { var settings=document.getElementById('settings-dialog'); if (settings) settings.showModal(); }
     var close=target.closest('[data-close-dialog]'); if (close) { var dialog=close.closest('dialog'); if(dialog) dialog.close(); }
     var rename=target.closest('[data-rename-url]'); if(rename) {
