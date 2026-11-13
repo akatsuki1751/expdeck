@@ -7,11 +7,18 @@
     var app = document.getElementById('app'); if (!app) return;
     var left = Math.max(160, Math.min(440, Number(get(keys.left, 234)) || 234));
     var right = Math.max(230, Math.min(520, Number(get(keys.right, 306)) || 306));
-    var available = Math.max(500, window.innerWidth - 310);
-    if (left + right > available) { var factor = available / (left + right); left = Math.max(160,Math.floor(left * factor)); right = Math.max(230,Math.floor(right * factor)); }
+    // Protect the reading area while keeping both panes resizable.
+    if (window.innerWidth > 700 && window.innerWidth < 1200) {
+      var available = Math.max(390, window.innerWidth - 440);
+      if (left + right > available) {
+        var factor = available / (left + right);
+        left = Math.max(160, Math.floor(left * factor));
+        right = Math.max(210, Math.floor(right * factor));
+      }
+    }
     document.documentElement.style.setProperty('--left-width', left + 'px');
     document.documentElement.style.setProperty('--right-width', right + 'px');
-    var closed = get(keys.rightClosed, '0') === '1'; app.classList.toggle('right-collapsed', closed);
+    var closed = get(keys.rightClosed, '1') === '1'; app.classList.toggle('right-collapsed', closed);
     var button = app.querySelector('[data-toggle-right]');
     if (button) { button.setAttribute('aria-expanded',String(!closed)); button.setAttribute('aria-label',closed ? '展开右侧栏' : '收起右侧栏'); button.title = closed ? '展开右侧栏' : '收起右侧栏'; }
     var theme = get(keys.theme, 'light') === 'dark' ? 'dark' : 'light';
