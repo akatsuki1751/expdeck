@@ -1,4 +1,4 @@
-// Package web 是 ExpDeck 的浏览与笔记编辑网页：只用标准库，不引前端框架。
+// Package web 是 ExpDeck 的浏览与笔记编辑网页：Go 服务端渲染，HTMX 增强交互。
 //
 // 页面全部由服务端渲染；只读页面在没有 JavaScript 时也能完整阅读。
 package web
@@ -46,12 +46,17 @@ const tokenCookie = "exp_token"
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	if static, err := fs.Sub(assets, "static"); err == nil {
-		mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(static))))
+		staticFiles := http.StripPrefix("/static/", http.FileServer(http.FS(static)))
+		mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The embedded assets can change whenever the binary is rebuilt.
+			w.Header().Set("Cache-Control", "no-cache")
+			staticFiles.ServeHTTP(w, r)
+		}))
 	} else {
 		log.Printf("expdeck web: 读取静态资源失败: %v", err)
 	}
 	mux.HandleFunc("/", s.handle)
-	return s.guard(mux)
+	return s.guard(s.actionLog(mux))
 }
 
 // guard 做两件事：令牌校验，以及拒绝跨站写请求。
@@ -105,6 +110,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 
 // handle 按路径分派：/ 是列表，/e/ 之下是详情与编辑。
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	// Boosted forms follow redirects; keep the visible URL aligned with the rendered page.
+	if r.Method == http.MethodGet && r.Header.Get("HX-Boosted") == "true" {
+		w.Header().Set("HX-Push-Url", r.URL.RequestURI())
+	}
 	if r.Method == http.MethodPost {
 		switch r.URL.Path {
 		case "/new":
@@ -112,6 +121,15 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		case "/adopt":
 			s.handleAdopt(w, r)
+			return
+		case "/backup":
+			s.handleBackup(w, r)
+			return
+		case "/restore":
+			s.handleRestore(w, r)
+			return
+		case "/gc":
+			s.handleGC(w, r)
 			return
 		}
 	}
@@ -121,8 +139,15 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleIndex(w, r)
+	case r.URL.Path == "/search":
+		if !onlyGet(w, r) {
+			return
+		}
+		s.handleSearch(w, r)
 	case strings.HasPrefix(r.URL.Path, "/e/"):
 		s.handleExperiment(w, r)
+	case r.URL.Path == "/activity":
+		s.handleActivity(w, r)
 	case strings.HasPrefix(r.URL.Path, "/log/"):
 		if !onlyGet(w, r) {
 			return
@@ -214,6 +239,10 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tree := buildTreeView(core.BuildTree(exps), "")
+	if err := s.populateTree(tree, ""); err != nil {
+		s.internalError(w, err)
+		return
+	}
 	s.render(w, http.StatusOK, "index", indexData{
 		Project:      s.projectName(),
 		Tree:         tree,
@@ -222,6 +251,39 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Error:        r.URL.Query().Get("error"),
 		Notice:       r.URL.Query().Get("ok"),
 	})
+}
+
+// handleSearch returns a sidebar fragment containing matching experiments.
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		s.render(w, http.StatusOK, "search-results", struct{ Query string }{})
+		return
+	}
+	matches, err := s.kernel.Search(query)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	tree, err := s.viewTree("")
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	wanted := make(map[string]bool, len(matches))
+	for _, exp := range matches {
+		wanted[exp.ID] = true
+	}
+	var views []*expView
+	for _, exp := range flattenTree(tree) {
+		if wanted[exp.ID] {
+			views = append(views, exp)
+		}
+	}
+	s.render(w, http.StatusOK, "search-results", struct {
+		Query   string
+		Results []*expView
+	}{query, views})
 }
 
 // handleDetail 渲染实验详情。
@@ -247,17 +309,38 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		return
 	}
 	data := detailData{
-		Project:  s.projectName(),
-		Tree:     tree,
-		Exp:      newExpView(exp),
-		Note:     note,
-		Diff:     diff,
-		Worktree: worktree,
-		Attached: worktree != "",
-		Error:    r.URL.Query().Get("error"),
+		Project:   s.projectName(),
+		Tree:      tree,
+		Exp:       newExpView(exp),
+		Note:      note,
+		Diff:      diff,
+		DiffLines: parseDiff(diff),
+		Worktree:  worktree,
+		Attached:  worktree != "",
+		Error:     r.URL.Query().Get("error"),
 	}
 	if diffErr != nil {
 		data.DiffErr = diffErr.Error()
+	}
+	if selected := r.URL.Query().Get("run"); selected != "" {
+		runs, err := s.kernel.ListRuns(exp)
+		if err != nil {
+			s.internalError(w, err)
+			return
+		}
+		for _, run := range runs {
+			if run.ID == selected {
+				data.SelectedRun = run
+				break
+			}
+		}
+		if data.SelectedRun == nil {
+			s.notFound(w)
+			return
+		}
+		s.kernel.Reconcile(data.SelectedRun)
+		data.SelectedLog, _, data.SelectedLogTruncated = readLogTail(s.kernel.LogPath(data.SelectedRun.ID))
+		markSelectedRun(tree, exp.PathString(), selected)
 	}
 	running, err := s.kernel.RunningRun(exp)
 	if err != nil {
@@ -481,7 +564,11 @@ func (s *Server) viewTree(active string) (*treeNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	return buildTreeView(core.BuildTree(exps), active), nil
+	tree := buildTreeView(core.BuildTree(exps), active)
+	if err := s.populateTree(tree, ""); err != nil {
+		return nil, err
+	}
+	return tree, nil
 }
 
 // worktreeOf 返回实验分支当前挂载的 worktree 目录；未挂载时返回空串。
@@ -535,6 +622,7 @@ func onlyGet(w http.ResponseWriter, r *http.Request) bool {
 
 // expView 是实验在页面上的展示投影。
 type expView struct {
+	ID           string
 	Path         string
 	URL          string
 	EditURL      string
@@ -544,6 +632,8 @@ type expView struct {
 	DetachURL    string
 	ConcludeURL  string
 	ReopenURL    string
+	RenameURL    string
+	Attached     bool
 	Branch       string
 	Hypothesis   string
 	Status       string
@@ -551,7 +641,13 @@ type expView struct {
 }
 
 // treeNode 是左侧树的展示节点；目录节点没有 Exp。
+type runView struct {
+	ID, URL, Status string
+	Active          bool
+}
 type treeNode struct {
+	Runs     []runView
+	Path     string
 	Name     string
 	Exp      *expView
 	Active   bool
@@ -568,19 +664,23 @@ type indexData struct {
 }
 
 type detailData struct {
-	Project      string
-	Tree         *treeNode
-	Exp          *expView
-	Note         string
-	Diff         string
-	DiffErr      string
-	Worktree     string
-	Attached     bool
-	Error        string
-	RunID        string
-	LogText      string
-	LogOffset    int64
-	LogTruncated bool
+	SelectedRun          *core.Run
+	SelectedLog          string
+	SelectedLogTruncated bool
+	Project              string
+	Tree                 *treeNode
+	Exp                  *expView
+	Note                 string
+	Diff                 string
+	DiffLines            []diffLine
+	DiffErr              string
+	Worktree             string
+	Attached             bool
+	Error                string
+	RunID                string
+	LogText              string
+	LogOffset            int64
+	LogTruncated         bool
 }
 
 type editData struct {
@@ -603,6 +703,7 @@ func (s *Server) projectName() string {
 
 func newExpView(exp *core.Experiment) *expView {
 	return &expView{
+		ID:           exp.ID,
 		Path:         exp.PathString(),
 		URL:          experimentURL(exp.Path),
 		EditURL:      editExperimentURL(exp.Path),
@@ -612,6 +713,7 @@ func newExpView(exp *core.Experiment) *expView {
 		DetachURL:    experimentActionURL(exp.Path, "detach"),
 		ConcludeURL:  experimentActionURL(exp.Path, "conclude"),
 		ReopenURL:    experimentActionURL(exp.Path, "reopen"),
+		RenameURL:    experimentActionURL(exp.Path, "rename"),
 		Branch:       exp.Branch,
 		Hypothesis:   exp.Hypothesis,
 		Status:       exp.Status,
@@ -663,7 +765,7 @@ func statusClass(status string) string {
 
 // buildTreeView 把 core 的树转换成展示节点。
 func buildTreeView(node *core.Node, active string) *treeNode {
-	view := &treeNode{Name: node.Name}
+	view := &treeNode{Name: node.Name, Path: strings.Join(node.Path, "/")}
 	for _, child := range node.Children {
 		view.Children = append(view.Children, buildTreeView(child, active))
 	}
@@ -688,4 +790,49 @@ func flattenTree(node *treeNode) []*expView {
 	}
 	walk(node)
 	return out
+}
+
+// populateTree loads the attached state and the runs shown under each experiment.
+func (s *Server) populateTree(tree *treeNode, activeRun string) error {
+	worktrees, err := s.kernel.Attached()
+	if err != nil {
+		return err
+	}
+	branches := map[string]bool{}
+	for _, branch := range worktrees {
+		branches[branch] = true
+	}
+	var walk func(*treeNode) error
+	walk = func(n *treeNode) error {
+		if n.Exp != nil {
+			n.Exp.Attached = branches[n.Exp.Branch]
+			exp := &core.Experiment{ID: n.Exp.ID}
+			runs, err := s.kernel.ListRuns(exp)
+			if err != nil {
+				return err
+			}
+			for i := len(runs) - 1; i >= 0; i-- {
+				run := runs[i]
+				n.Runs = append(n.Runs, runView{ID: run.ID, Status: run.Status, URL: n.Exp.URL + "?run=" + url.QueryEscape(run.ID), Active: n.Active && run.ID == activeRun})
+			}
+		}
+		for _, child := range n.Children {
+			if err := walk(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walk(tree)
+}
+func markSelectedRun(tree *treeNode, path, runID string) {
+	if tree.Exp != nil && tree.Exp.Path == path {
+		for i := range tree.Runs {
+			tree.Runs[i].Active = tree.Runs[i].ID == runID
+		}
+		tree.Active = false
+	}
+	for _, child := range tree.Children {
+		markSelectedRun(child, path, runID)
+	}
 }

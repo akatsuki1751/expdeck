@@ -57,13 +57,13 @@ func TestWebAttachAndDetach(t *testing.T) {
 	if rec := post(t, h, "/e/sensitive/lr/attach"); rec.Code != http.StatusSeeOther {
 		t.Fatalf("attach: want 303, got %d", rec.Code)
 	}
-	if _, body := get(t, h, "/e/sensitive/lr"); !strings.Contains(body, "卸载 worktree") {
+	if _, body := get(t, h, "/e/sensitive/lr"); !strings.Contains(body, "/e/sensitive/lr/detach") {
 		t.Fatalf("detail page should offer detach after attach")
 	}
 	if rec := post(t, h, "/e/sensitive/lr/detach"); rec.Code != http.StatusSeeOther {
 		t.Fatalf("detach: want 303, got %d", rec.Code)
 	}
-	if _, body := get(t, h, "/e/sensitive/lr"); !strings.Contains(body, "挂载 worktree") {
+	if _, body := get(t, h, "/e/sensitive/lr"); !strings.Contains(body, "/e/sensitive/lr/attach") {
 		t.Fatalf("detail page should offer attach after detach")
 	}
 }
@@ -106,5 +106,17 @@ func TestWebAdoptButton(t *testing.T) {
 	}
 	if code, payload := runJSON(t, repo, "show", "ablation/sigreg"); code != 0 {
 		t.Fatalf("adopted experiment missing: %d %v", code, payload)
+	}
+}
+
+func TestWebBackupButton(t *testing.T) {
+	repo := scaffold(t)
+	h := newHandler(t, repo)
+
+	if rec := post(t, h, "/backup"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("backup: want 303, got %d", rec.Code)
+	}
+	if out := git(t, repo, "branch", "--list", "book"); !strings.Contains(out, "book") {
+		t.Fatalf("book branch missing after web backup: %s", out)
 	}
 }
