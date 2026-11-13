@@ -126,16 +126,20 @@ func findWorktree(worktrees map[string]string, branch string) (string, bool) {
 	return "", false
 }
 
-// removeEmptyWorktreeParents 从叶子向上删除空目录，保留工作树根及其中其他内容。
+// removeEmptyWorktreeParents 从叶子向上删除空目录，最多删除到工作树根。
 func removeEmptyWorktreeParents(dir, root string) error {
 	root = filepath.Clean(root)
-	for dir = filepath.Clean(dir); dir != root; dir = filepath.Dir(dir) {
+	for dir = filepath.Clean(dir); ; dir = filepath.Dir(dir) {
+		isRoot := dir == root
 		rel, err := filepath.Rel(root, dir)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 			return fmt.Errorf("目录 %q 不在工作树根 %q 内", dir, root)
 		}
 		info, err := os.Lstat(dir)
 		if os.IsNotExist(err) {
+			if isRoot {
+				return nil
+			}
 			continue
 		}
 		if err != nil {
@@ -149,10 +153,15 @@ func removeEmptyWorktreeParents(dir, root string) error {
 				return nil
 			}
 			if os.IsNotExist(err) {
+				if isRoot {
+					return nil
+				}
 				continue
 			}
 			return fmt.Errorf("删除 %q: %w", dir, err)
 		}
+		if isRoot {
+			return nil
+		}
 	}
-	return nil
 }
