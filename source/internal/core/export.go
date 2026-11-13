@@ -16,8 +16,11 @@ type ExportSelection struct {
 	Runs       []string
 }
 type ExportOptions struct {
-	Logs      bool
-	Artifacts bool
+	Logs          bool
+	Results       bool
+	FilterResults bool // hide result metrics from run metadata when not selected
+	Weights       bool
+	Artifacts     bool // legacy CLI option: export all artifact files
 }
 
 // Export writes a zip containing selected run metadata and optionally its logs and artifacts.
@@ -101,20 +104,40 @@ func (k *Kernel) Export(w io.Writer, selection []ExportSelection, opts ExportOpt
 				return fmt.Errorf("%w: run %s is running", ErrConflict, id)
 			}
 			runbase := path.Join(base, "runs", run.ID)
-			raw, err := json.MarshalIndent(run, "", "  ")
+			exportRun := *run
+			if opts.FilterResults && !opts.Results {
+				exportRun.Metrics = nil
+			}
+			exportRun.Artifacts = nil
+			for _, artifact := range run.Artifacts {
+				if (isWeightArtifact(artifact.Name) && (opts.Weights || opts.Artifacts)) ||
+					(!isWeightArtifact(artifact.Name) && (opts.Results || opts.Artifacts)) {
+					exportRun.Artifacts = append(exportRun.Artifacts, artifact)
+				}
+			}
+			raw, err := json.MarshalIndent(exportRun, "", "  ")
 			if err != nil {
 				return err
 			}
 			if err = add(path.Join(runbase, "run.json"), raw); err != nil {
 				return err
 			}
+			if opts.Results && len(run.Metrics) > 0 {
+				metrics, err := json.MarshalIndent(run.Metrics, "", "  ")
+				if err != nil {
+					return err
+				}
+				if err = add(path.Join(runbase, "metrics.json"), metrics); err != nil {
+					return err
+				}
+			}
 			if opts.Logs && run.Log != "" {
 				if err = addFile(path.Join(runbase, "stdout.log"), run.Log); err != nil {
 					return err
 				}
 			}
-			if opts.Artifacts {
-				for i, a := range run.Artifacts {
+			if len(exportRun.Artifacts) > 0 {
+				for i, a := range exportRun.Artifacts {
 					// Stored hashes, not names or paths from records, determine the source.
 					if len(a.SHA256) != 64 || strings.Trim(a.SHA256, "0123456789abcdef") != "" {
 						return fmt.Errorf("%w: invalid artifact digest", ErrInvalid)
@@ -132,4 +155,14 @@ func (k *Kernel) Export(w io.Writer, selection []ExportSelection, opts ExportOpt
 		}
 	}
 	return zw.Close()
+}
+
+// isWeightArtifact distinguishes common model checkpoint formats from other outputs.
+func isWeightArtifact(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".pt", ".pth", ".ckpt", ".safetensors", ".onnx", ".h5", ".hdf5", ".keras", ".weights", ".bin":
+		return true
+	default:
+		return false
+	}
 }

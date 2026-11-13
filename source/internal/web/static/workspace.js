@@ -32,7 +32,7 @@
     });
   }
   document.addEventListener('click', function (event) {
-    if (event.target.closest('.folder-create')) return;
+    if (event.target.closest('.folder-create') || event.target.closest('.export-folder-check')) return;
     var summary=event.target.closest('.tree-branch > summary'); if (!summary) return;
     var folder=summary.parentElement;
     var states; try { states=JSON.parse(get('exp.tree.folders','{}')); } catch (_) { states={}; }
@@ -61,11 +61,27 @@
   document.addEventListener('DOMContentLoaded', function () { apply(); restoreTree(); restoreRuns(); });
   document.addEventListener('htmx:load', function () { apply(); restoreTree(); restoreRuns(); });
   window.addEventListener('resize', apply);
+  function syncExportFolders() {
+    document.querySelectorAll('.tree-branch').forEach(function(folder) {
+      var box=folder.querySelector(':scope > summary .export-folder-check');
+      if(!box) return;
+      var leaves=Array.from(folder.querySelectorAll('.export-check'));
+      var count=leaves.filter(function(input){ return input.checked; }).length;
+      box.checked=leaves.length>0 && count===leaves.length;
+      box.indeterminate=count>0 && count<leaves.length;
+    });
+  }
   document.addEventListener('change', function (event) {
+    var folder=event.target.closest('.export-folder-check');
+    if(folder) {
+      folder.closest('.tree-branch').querySelectorAll('.export-check').forEach(function(input){input.checked=folder.checked;});
+      syncExportFolders();
+    } else if(event.target.matches('.export-check')) syncExportFolders();
     if (event.target.matches('input[name="theme"]')) { put(keys.theme, event.target.value); apply(); }
   });
   document.addEventListener('click', function (event) {
     var target = event.target;
+    if(target.closest('.export-folder-check')) { event.stopPropagation(); return; }
     var exportToggle=target.closest('[data-export-toggle]');
     if(exportToggle) { var app=document.getElementById('app'); app.classList.toggle('export-mode'); var menu=exportToggle.closest('details'); if(menu) menu.open=false; if(app.classList.contains('export-mode')) { var input=document.getElementById('rail-search-input'); if(input) { input.value=''; updateSearch(); } } }
 
