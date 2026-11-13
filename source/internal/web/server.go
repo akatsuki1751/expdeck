@@ -116,6 +116,15 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPost {
 		switch r.URL.Path {
+		case "/export":
+			s.handleExport(w, r)
+			return
+		case "/run-outcome":
+			s.handleOutcome(w, r)
+			return
+		case "/representative":
+			s.handleRepresentative(w, r)
+			return
 		case "/new":
 			s.handleNew(w, r)
 			return
@@ -308,7 +317,13 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		s.internalError(w, err)
 		return
 	}
+	representative, manual, err := s.kernel.Representative(exp)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
 	data := detailData{
+		Representative: representative, RepresentativeManual: manual,
 		Project:   s.projectName(),
 		Tree:      tree,
 		Exp:       newExpView(exp),
@@ -331,6 +346,14 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		for _, run := range runs {
 			if run.ID == selected {
 				data.SelectedRun = run
+				data.SelectedRunValid = core.RunValid(run)
+				if data.SelectedRunValid {
+					data.SelectedRunLabel = "有效"
+				} else if run.Outcome == "invalid" {
+					data.SelectedRunLabel = "无效"
+				} else {
+					data.SelectedRunLabel = "未评定"
+				}
 				break
 			}
 		}
@@ -622,22 +645,26 @@ func onlyGet(w http.ResponseWriter, r *http.Request) bool {
 
 // expView 是实验在页面上的展示投影。
 type expView struct {
-	ID           string
-	Path         string
-	URL          string
-	EditURL      string
-	RunURL       string
-	InterruptURL string
-	AttachURL    string
-	DetachURL    string
-	ConcludeURL  string
-	ReopenURL    string
-	RenameURL    string
-	Attached     bool
-	Branch       string
-	Hypothesis   string
-	Status       string
-	StatusClass  string
+	ID                   string
+	Path                 string
+	URL                  string
+	EditURL              string
+	RunURL               string
+	InterruptURL         string
+	AttachURL            string
+	DetachURL            string
+	ConcludeURL          string
+	ReopenURL            string
+	RenameURL            string
+	DeleteURL            string
+	Attached             bool
+	Dirty                bool
+	Branch               string
+	Hypothesis           string
+	Representative       string
+	RepresentativeManual bool
+	Status               string
+	StatusClass          string
 }
 
 // treeNode 是左侧树的展示节点；目录节点没有 Exp。
@@ -664,6 +691,10 @@ type indexData struct {
 }
 
 type detailData struct {
+	Representative       *core.Run
+	RepresentativeManual bool
+	SelectedRunValid     bool
+	SelectedRunLabel     string
 	SelectedRun          *core.Run
 	SelectedLog          string
 	SelectedLogTruncated bool
@@ -714,6 +745,7 @@ func newExpView(exp *core.Experiment) *expView {
 		ConcludeURL:  experimentActionURL(exp.Path, "conclude"),
 		ReopenURL:    experimentActionURL(exp.Path, "reopen"),
 		RenameURL:    experimentActionURL(exp.Path, "rename"),
+		DeleteURL:    experimentActionURL(exp.Path, "delete"),
 		Branch:       exp.Branch,
 		Hypothesis:   exp.Hypothesis,
 		Status:       exp.Status,
@@ -805,7 +837,31 @@ func (s *Server) populateTree(tree *treeNode, activeRun string) error {
 	var walk func(*treeNode) error
 	walk = func(n *treeNode) error {
 		if n.Exp != nil {
+			current, err := s.kernel.Find(n.Exp.ID)
+			if err != nil {
+				return err
+			}
+			rep, manual, err := s.kernel.Representative(current)
+			if err != nil {
+				return err
+			}
+			if rep != nil {
+				n.Exp.Representative = rep.ID
+				n.Exp.RepresentativeManual = manual
+			}
 			n.Exp.Attached = branches[n.Exp.Branch]
+			if n.Exp.Attached {
+				for dir, branch := range worktrees {
+					if branch == n.Exp.Branch {
+						status, err := s.kernel.Repo.Git("-C", dir, "status", "--porcelain", "--ignored")
+						if err != nil {
+							return err
+						}
+						n.Exp.Dirty = strings.TrimSpace(status) != ""
+						break
+					}
+				}
+			}
 			exp := &core.Experiment{ID: n.Exp.ID}
 			runs, err := s.kernel.ListRuns(exp)
 			if err != nil {
