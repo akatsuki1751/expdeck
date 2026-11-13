@@ -13,6 +13,15 @@ import (
 
 // StartRun 起一次运行并立刻返回；等待交给 __watch 监督进程。
 func (k *Kernel) StartRun(exp *Experiment, gpu int) (*Run, error) {
+	lock, err := k.Store.AcquireLock()
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Unlock()
+	exp, err = k.Find(exp.ID)
+	if err != nil {
+		return nil, err
+	}
 	worktrees, err := k.Attached()
 	if err != nil {
 		return nil, err

@@ -27,6 +27,7 @@ type Run struct {
 	ID         string             `json:"id"`
 	Exp        string             `json:"exp"`
 	Status     string             `json:"status"`
+	Outcome    string             `json:"outcome,omitempty"`
 	Command    string             `json:"command"`
 	Cwd        string             `json:"cwd"`
 	PID        int                `json:"pid"`
@@ -83,6 +84,10 @@ func (k *Kernel) SaveRun(exp *Experiment, run *Run) error {
 
 // LoadRun 读一个 run。
 func (k *Kernel) LoadRun(exp *Experiment, runID string) (*Run, error) {
+	if runID == "" || runID == "." || runID == ".." || strings.ContainsAny(runID, "/\\") {
+		return nil, fmt.Errorf("%w: invalid run ID", ErrInvalid)
+	}
+
 	var run Run
 	if err := records.ReadJSON(k.RunPath(exp, runID), &run); err != nil {
 		if os.IsNotExist(err) {

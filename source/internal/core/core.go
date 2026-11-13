@@ -31,11 +31,12 @@ var (
 
 // Experiment 是实验的记录部分；它的代码身份是 Branch。
 type Experiment struct {
-	ID         string   `json:"id"`
-	Path       []string `json:"path"`
-	Branch     string   `json:"branch"`
-	Hypothesis string   `json:"hypothesis"`
-	Status     string   `json:"status"`
+	ID                string   `json:"id"`
+	Path              []string `json:"path"`
+	Branch            string   `json:"branch"`
+	Hypothesis        string   `json:"hypothesis"`
+	Status            string   `json:"status"`
+	RepresentativeRun string   `json:"representative_run,omitempty"`
 }
 
 // PathString 返回斜杠连接的可读路径。
