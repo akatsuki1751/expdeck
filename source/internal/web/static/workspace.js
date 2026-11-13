@@ -32,6 +32,7 @@
     });
   }
   document.addEventListener('click', function (event) {
+    if (event.target.closest('.folder-create')) return;
     var summary=event.target.closest('.tree-branch > summary'); if (!summary) return;
     var folder=summary.parentElement;
     var states; try { states=JSON.parse(get('exp.tree.folders','{}')); } catch (_) { states={}; }
@@ -55,13 +56,17 @@
   });
   document.addEventListener('click', function (event) {
     var target = event.target;
+    var searchToggle=target.closest('[data-search-toggle]');
+    if(searchToggle) { var search=document.querySelector('.rail-search'); search.hidden=!search.hidden; searchToggle.setAttribute('aria-expanded',String(!search.hidden)); if(!search.hidden) search.querySelector('input').focus(); }
+    var folderCreate=target.closest('.folder-create'); if(folderCreate) { event.preventDefault(); event.stopPropagation(); }
+
     var runToggle=target.closest('[data-run-toggle]'); if (runToggle) {
       var states; try { states=JSON.parse(get('exp.tree.runs','{}')); } catch (_) { states={}; }
       states[runToggle.dataset.runToggle]=runToggle.getAttribute('aria-expanded') !== 'true';
       put('exp.tree.runs',JSON.stringify(states)); restoreRuns();
     }
     if (target.closest('[data-toggle-right]')) { var app=document.getElementById('app'); put(keys.rightClosed, app.classList.contains('right-collapsed') ? '0' : '1'); apply(); }
-    var open=target.closest('[data-open-dialog]'); if (open) { var toOpen=document.getElementById(open.dataset.openDialog); var current=open.closest('details.menu'); if(current)current.open=false; if(toOpen)toOpen.showModal(); }
+    var open=target.closest('[data-open-dialog]'); if (open) { var toOpen=document.getElementById(open.dataset.openDialog); var current=open.closest('details.menu'); if(current)current.open=false; if(toOpen) { if(open.dataset.openDialog==='create-dialog') { var path=toOpen.querySelector('input[name="path"]'); path.value=open.dataset.createPrefix ? open.dataset.createPrefix+'/' : ''; } toOpen.showModal(); if(open.dataset.openDialog==='create-dialog') { var field=toOpen.querySelector('input[name="path"]'); field.focus(); field.setSelectionRange(field.value.length,field.value.length); } } }
     var conclude=target.closest('[data-conclude-url]'); if(conclude) { var form=document.getElementById('conclude-form'), dialog=document.getElementById('conclude-dialog'); form.action=conclude.dataset.concludeUrl; var menu=conclude.closest('details'); if(menu)menu.open=false; dialog.showModal(); }
     if (target.closest('[data-open-settings]')) { var settings=document.getElementById('settings-dialog'); if (settings) settings.showModal(); }
     var close=target.closest('[data-close-dialog]'); if (close) { var dialog=close.closest('dialog'); if(dialog) dialog.close(); }

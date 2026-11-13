@@ -35,7 +35,7 @@ func TestTreeShowsRunsAndSelectedRunDetails(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("status %d", code)
 	}
-	for _, want := range []string{`data-run-toggle="` + exp.ID + `"`, `?run=20261113-120001-a1b2`, `?run=20261113-120002-c3d4`, `class="rail-new"`} {
+	for _, want := range []string{`data-run-toggle="` + exp.ID + `"`, `?run=20261113-120001-a1b2`, `?run=20261113-120002-c3d4`, `data-search-toggle`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

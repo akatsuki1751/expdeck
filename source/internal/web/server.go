@@ -139,6 +139,11 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleIndex(w, r)
+	case r.URL.Path == "/search":
+		if !onlyGet(w, r) {
+			return
+		}
+		s.handleSearch(w, r)
 	case strings.HasPrefix(r.URL.Path, "/e/"):
 		s.handleExperiment(w, r)
 	case r.URL.Path == "/activity":
@@ -246,6 +251,31 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Error:        r.URL.Query().Get("error"),
 		Notice:       r.URL.Query().Get("ok"),
 	})
+}
+
+// handleSearch renders matching experiment paths; note contents stay in core.
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	matches, err := s.kernel.Search(query)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	tree, err := s.viewTree("")
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	views := make([]*expView, 0, len(matches))
+	for _, exp := range matches {
+		views = append(views, newExpView(exp))
+	}
+	s.render(w, http.StatusOK, "search", struct {
+		Project string
+		Tree    *treeNode
+		Query   string
+		Results []*expView
+	}{s.projectName(), tree, query, views})
 }
 
 // handleDetail 渲染实验详情。
