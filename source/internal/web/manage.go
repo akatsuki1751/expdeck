@@ -81,7 +81,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
-	err = s.kernel.Export(f, sel, core.ExportOptions{Logs: r.FormValue("logs") == "1", Artifacts: r.FormValue("artifacts") == "1"})
+	err = s.kernel.Export(f, sel, core.ExportOptions{Logs: r.FormValue("logs") == "1", Results: r.FormValue("results") == "1", FilterResults: true, Weights: r.FormValue("weights") == "1"})
 	if err != nil {
 		http.Error(w, "导出失败: "+err.Error(), http.StatusBadRequest)
 		return

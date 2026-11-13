@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -242,5 +243,114 @@ func TestCLIReviewAndExport(t *testing.T) {
 	}
 	if code, _ := run(t, repo, "delete", "sensitive/lr"); code == 0 {
 		t.Fatal("delete must require --yes")
+	}
+}
+
+func TestExportSeparatesResultsWeightsAndLogs(t *testing.T) {
+	_, k, exp := setupReviewRuns(t)
+	run, err := k.LoadRun(exp, "20261113-110000-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"scores.json", "best.pth"} {
+		data := []byte(name)
+		sum := fmt.Sprintf("%x", sha256.Sum256(data))
+		object := filepath.Join(k.ObjectsDir(), sum[:2], sum)
+		if err = os.MkdirAll(filepath.Dir(object), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(object, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		run.Artifacts = append(run.Artifacts, core.Artifact{Name: name, SHA256: sum})
+	}
+	run.Log = k.LogPath(run.ID)
+	if err = os.WriteFile(run.Log, []byte("training"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = k.SaveRun(exp, run); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name     string
+		opts     core.ExportOptions
+		expected string
+		absent   []string
+	}{
+		{"logs", core.ExportOptions{Logs: true}, "stdout.log", []string{"scores.json", "best.pth", "metrics.json"}},
+		{"results", core.ExportOptions{Results: true}, "scores.json", []string{"stdout.log", "best.pth"}},
+		{"weights", core.ExportOptions{Weights: true}, "best.pth", []string{"stdout.log", "scores.json", "metrics.json"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := k.Export(&buf, []core.ExportSelection{{Experiment: exp.ID}}, tc.opts); err != nil {
+				t.Fatal(err)
+			}
+			zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var names []string
+			for _, f := range zr.File {
+				names = append(names, f.Name)
+			}
+			joined := strings.Join(names, "\n")
+			if !strings.Contains(joined, tc.expected) {
+				t.Fatalf("missing %s: %s", tc.expected, joined)
+			}
+			for _, name := range tc.absent {
+				if strings.Contains(joined, name) {
+					t.Fatalf("unexpected %s: %s", name, joined)
+				}
+			}
+			if tc.name == "results" && !strings.Contains(joined, "metrics.json") {
+				t.Fatal("missing metrics")
+			}
+		})
+	}
+}
+
+func TestWebExportRespectsResultOption(t *testing.T) {
+	repo, k, exp := setupReviewRuns(t)
+	run, err := k.LoadRun(exp, "20261113-110000-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Metrics = map[string]float64{"accuracy": 0.95}
+	if err = k.SaveRun(exp, run); err != nil {
+		t.Fatal(err)
+	}
+	h := newHandler(t, repo)
+	form := url.Values{"exp": {exp.ID}, "weights": {"1"}}
+	req := httptest.NewRequest(http.MethodPost, "/export", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, "metrics.json") {
+			t.Fatal("metrics file exported without selection")
+		}
+		if strings.HasSuffix(f.Name, "run.json") {
+			reader, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(reader)
+			reader.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), "accuracy") {
+				t.Fatal("metrics leaked into metadata")
+			}
+		}
 	}
 }
