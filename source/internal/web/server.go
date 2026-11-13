@@ -46,7 +46,12 @@ const tokenCookie = "exp_token"
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	if static, err := fs.Sub(assets, "static"); err == nil {
-		mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(static))))
+		staticFiles := http.StripPrefix("/static/", http.FileServer(http.FS(static)))
+		mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The embedded assets can change whenever the binary is rebuilt.
+			w.Header().Set("Cache-Control", "no-cache")
+			staticFiles.ServeHTTP(w, r)
+		}))
 	} else {
 		log.Printf("expdeck web: 读取静态资源失败: %v", err)
 	}
