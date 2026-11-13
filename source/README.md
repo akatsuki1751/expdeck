@@ -30,6 +30,8 @@ exp conclude lr/1e-4 --decision abandon --why "验证集过拟合"
 exp serve              # 只监听本机，启动时打印带令牌的地址
 ```
 
+网页静态素材保存在 `source/internal/web/static/`：`icons/` 存放 Lucide SVG 与许可说明，`brand/` 存放项目自己的浏览器图标；它们随 Go 二进制一起内嵌。
+
 ## 网页的访问控制
 
 `exp serve` 每次启动生成一次性令牌，打印形如 `http://127.0.0.1:8787/?token=…` 的地址。用带 token 的地址打开一次，服务端换成 `HttpOnly` + `SameSite=Lax` 的 cookie，之后正常访问。
