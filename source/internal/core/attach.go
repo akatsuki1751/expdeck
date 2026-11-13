@@ -1,10 +1,12 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"expdeck/internal/records"
 )
@@ -95,6 +97,13 @@ func (k *Kernel) Detach(exp *Experiment) (string, error) {
 	if err := k.Repo.WorktreeRemove(dir, true); err != nil {
 		return "", fmt.Errorf("%w: 卸载 worktree 失败: %v", ErrConflict, err)
 	}
+	// 只整理默认工作树路径下的父目录；用户自定义的位置不触碰。
+	if filepath.Clean(dir) == filepath.Clean(k.WorktreePath(exp)) {
+		root := filepath.Join(filepath.Dir(k.Repo.Root), filepath.Base(k.Repo.Root)+"-exp")
+		if err := removeEmptyWorktreeParents(filepath.Dir(dir), root); err != nil {
+			return patchPath, fmt.Errorf("工作树已卸载，但清理空目录失败: %w", err)
+		}
+	}
 	return patchPath, nil
 }
 
@@ -115,4 +124,35 @@ func findWorktree(worktrees map[string]string, branch string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// removeEmptyWorktreeParents 从叶子向上删除空目录，保留工作树根及其中其他内容。
+func removeEmptyWorktreeParents(dir, root string) error {
+	root = filepath.Clean(root)
+	for dir = filepath.Clean(dir); dir != root; dir = filepath.Dir(dir) {
+		rel, err := filepath.Rel(root, dir)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			return fmt.Errorf("目录 %q 不在工作树根 %q 内", dir, root)
+		}
+		info, err := os.Lstat(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return nil
+		} // 包括符号链接：不删除、不沿其向上清理。
+		if err := os.Remove(dir); err != nil {
+			if errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST) {
+				return nil
+			}
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("删除 %q: %w", dir, err)
+		}
+	}
+	return nil
 }

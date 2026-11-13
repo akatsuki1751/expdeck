@@ -108,3 +108,58 @@ func TestDetachKeepsRecords(t *testing.T) {
 		t.Fatalf("record lost after detach: %q", got)
 	}
 }
+
+func TestDetachPrunesOnlyEmptyDefaultParents(t *testing.T) {
+	repo := scaffold(t)
+	defer os.RemoveAll(attachRoot(repo))
+	if code, out := run(t, repo, "new", "sensitive/other", "--why", "second experiment"); code != 0 {
+		t.Fatalf("new: %s", out)
+	}
+	runJSON(t, repo, "attach", "sensitive/lr")
+	runJSON(t, repo, "attach", "sensitive/other")
+	if code, out := run(t, repo, "detach", "sensitive/lr"); code != 0 {
+		t.Fatalf("detach first: %s", out)
+	}
+	parent := filepath.Join(attachRoot(repo), "sensitive")
+	if _, err := os.Stat(parent); err != nil {
+		t.Fatalf("parent containing another worktree removed: %v", err)
+	}
+	marker := filepath.Join(parent, "keep.txt")
+	if err := os.WriteFile(marker, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := run(t, repo, "detach", "sensitive/other"); code != 0 {
+		t.Fatalf("detach second: %s", out)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("nonempty parent removed: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	runJSON(t, repo, "attach", "sensitive/lr")
+	if code, out := run(t, repo, "detach", "sensitive/lr"); code != 0 {
+		t.Fatalf("detach last: %s", out)
+	}
+	if _, err := os.Stat(parent); !os.IsNotExist(err) {
+		t.Fatalf("empty parent remains: %v", err)
+	}
+	if _, err := os.Stat(attachRoot(repo)); err != nil {
+		t.Fatalf("managed root should remain: %v", err)
+	}
+}
+
+func TestDetachLeavesCustomParentAlone(t *testing.T) {
+	repo := scaffold(t)
+	parent := filepath.Join(t.TempDir(), "user-parent")
+	worktree := filepath.Join(parent, "checkout")
+	if code, out := run(t, repo, "attach", "sensitive/lr", worktree); code != 0 {
+		t.Fatalf("attach custom: %s", out)
+	}
+	if code, out := run(t, repo, "detach", "sensitive/lr"); code != 0 {
+		t.Fatalf("detach custom: %s", out)
+	}
+	if _, err := os.Stat(parent); err != nil {
+		t.Fatalf("custom parent removed: %v", err)
+	}
+}
