@@ -2,7 +2,7 @@ package core
 
 import "strings"
 
-// Search finds experiments by path or saved note, without changing records.
+// Search finds experiments by path or hypothesis, without changing records.
 func (k *Kernel) Search(query string) ([]*Experiment, error) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
@@ -18,11 +18,7 @@ func (k *Kernel) Search(query string) ([]*Experiment, error) {
 			matches = append(matches, exp)
 			continue
 		}
-		note, _, err := k.ReadNote(exp)
-		if err != nil {
-			return nil, err
-		}
-		if strings.Contains(strings.ToLower(note), query) {
+		if strings.Contains(strings.ToLower(exp.Hypothesis), query) {
 			matches = append(matches, exp)
 		}
 	}
