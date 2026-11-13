@@ -144,8 +144,8 @@ func TestDetachPrunesOnlyEmptyDefaultParents(t *testing.T) {
 	if _, err := os.Stat(parent); !os.IsNotExist(err) {
 		t.Fatalf("empty parent remains: %v", err)
 	}
-	if _, err := os.Stat(attachRoot(repo)); err != nil {
-		t.Fatalf("managed root should remain: %v", err)
+	if _, err := os.Stat(attachRoot(repo)); !os.IsNotExist(err) {
+		t.Fatalf("empty managed root remains: %v", err)
 	}
 }
 
@@ -161,5 +161,21 @@ func TestDetachLeavesCustomParentAlone(t *testing.T) {
 	}
 	if _, err := os.Stat(parent); err != nil {
 		t.Fatalf("custom parent removed: %v", err)
+	}
+}
+
+func TestDetachKeepsNonemptyManagedRoot(t *testing.T) {
+	repo := scaffold(t)
+	defer os.RemoveAll(attachRoot(repo))
+	runJSON(t, repo, "attach", "sensitive/lr")
+	marker := filepath.Join(attachRoot(repo), "keep.txt")
+	if err := os.WriteFile(marker, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := run(t, repo, "detach", "sensitive/lr"); code != 0 {
+		t.Fatalf("detach: %s", out)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("root content removed: %v", err)
 	}
 }
