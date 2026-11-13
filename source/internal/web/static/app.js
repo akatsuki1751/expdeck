@@ -8,7 +8,6 @@
     var collapsed = false;
     try { collapsed = localStorage.getItem('exp.rail.collapsed') === '1'; } catch (_) {}
     app.classList.toggle('rail-collapsed', collapsed);
-    button.textContent = collapsed ? '›' : '‹';
     button.setAttribute('aria-expanded', String(!collapsed));
     button.setAttribute('aria-label', collapsed ? '展开侧栏' : '收起侧栏');
   }
@@ -19,7 +18,6 @@
     var collapsed = !app.classList.contains('rail-collapsed');
     try { localStorage.setItem('exp.rail.collapsed', collapsed ? '1' : '0'); } catch (_) {}
     app.classList.toggle('rail-collapsed', collapsed);
-    button.textContent = collapsed ? '›' : '‹';
     button.setAttribute('aria-expanded', String(!collapsed));
     button.setAttribute('aria-label', collapsed ? '展开侧栏' : '收起侧栏');
   });
