@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"expdeck/internal/records"
 )
@@ -63,6 +64,13 @@ func (k *Kernel) Detach(exp *Experiment) (string, error) {
 	dir, ok := findWorktree(worktrees, exp.Branch)
 	if !ok {
 		return "", fmt.Errorf("%w: 实验 %q 没有挂载的 worktree", ErrNotFound, exp.PathString())
+	}
+	ignored, err := k.Repo.Git("-C", dir, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(ignored) != "" {
+		return "", fmt.Errorf("%w: worktree contains ignored files; move them before detaching", ErrConflict)
 	}
 	lock, err := k.Store.AcquireLock()
 	if err != nil {
