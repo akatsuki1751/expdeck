@@ -48,6 +48,16 @@
       button.setAttribute('aria-label',(expanded ? '收起 ' : '展开 ') + (button.dataset.runName || '') + ' 的运行记录');
     });
   }
+  function updateSearch() {
+    var input=document.getElementById('rail-search-input');
+    var tree=document.querySelector('.rail-tree'), results=document.getElementById('rail-search-results');
+    if(!input || !tree || !results) return;
+    var searching=!!input.value.trim();
+    tree.hidden=searching; results.hidden=!searching;
+    if(!searching) results.replaceChildren();
+  }
+  document.addEventListener('input', function(event) { if(event.target.id==='rail-search-input') updateSearch(); });
+  document.addEventListener('search', function(event) { if(event.target.id==='rail-search-input') updateSearch(); }, true);
   document.addEventListener('DOMContentLoaded', function () { apply(); restoreTree(); restoreRuns(); });
   document.addEventListener('htmx:load', function () { apply(); restoreTree(); restoreRuns(); });
   window.addEventListener('resize', apply);
@@ -57,7 +67,8 @@
   document.addEventListener('click', function (event) {
     var target = event.target;
     var searchToggle=target.closest('[data-search-toggle]');
-    if(searchToggle) { var search=document.querySelector('.rail-search'); search.hidden=!search.hidden; searchToggle.setAttribute('aria-expanded',String(!search.hidden)); if(!search.hidden) search.querySelector('input').focus(); }
+    if(searchToggle) { var search=document.querySelector('.rail-search'); search.hidden=!search.hidden; searchToggle.setAttribute('aria-expanded',String(!search.hidden)); if(!search.hidden) search.querySelector('input').focus(); else { search.querySelector('input').value=''; updateSearch(); } }
+    if(target.closest('[data-search-clear]')) { var input=document.getElementById('rail-search-input'); input.value=''; updateSearch(); input.focus(); }
     var folderCreate=target.closest('.folder-create'); if(folderCreate) { event.preventDefault(); event.stopPropagation(); }
 
     var runToggle=target.closest('[data-run-toggle]'); if (runToggle) {

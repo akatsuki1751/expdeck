@@ -253,9 +253,13 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleSearch renders matching experiment paths; note contents stay in core.
+// handleSearch returns a sidebar fragment containing matching experiments.
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		s.render(w, http.StatusOK, "search-results", struct{ Query string }{})
+		return
+	}
 	matches, err := s.kernel.Search(query)
 	if err != nil {
 		s.internalError(w, err)
@@ -266,16 +270,20 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	views := make([]*expView, 0, len(matches))
+	wanted := make(map[string]bool, len(matches))
 	for _, exp := range matches {
-		views = append(views, newExpView(exp))
+		wanted[exp.ID] = true
 	}
-	s.render(w, http.StatusOK, "search", struct {
-		Project string
-		Tree    *treeNode
+	var views []*expView
+	for _, exp := range flattenTree(tree) {
+		if wanted[exp.ID] {
+			views = append(views, exp)
+		}
+	}
+	s.render(w, http.StatusOK, "search-results", struct {
 		Query   string
 		Results []*expView
-	}{s.projectName(), tree, query, views})
+	}{query, views})
 }
 
 // handleDetail 渲染实验详情。

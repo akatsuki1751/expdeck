@@ -7,18 +7,23 @@ import (
 	"testing"
 )
 
-func TestWebSearchNamesAndSavedNotes(t *testing.T) {
+func TestWebSearchNamesAndHypothesesNotNotes(t *testing.T) {
 	repo := scaffold(t)
-	runJSON(t, repo, "note", "sensitive/lr", "--text", "独特的笔记关键词 NeedleCase")
+	runJSON(t, repo, "note", "sensitive/lr", "--text", "UniqueNoteNeedle")
 	h := newHandler(t, repo)
-	for _, query := range []string{"SENSITIVE", "needlecase", "笔记关键词"} {
+	for _, query := range []string{"SENSITIVE", "1e-4", "降到"} {
 		code, body := get(t, h, "/search?q="+url.QueryEscape(query))
-		if code != http.StatusOK || !strings.Contains(body, "<tbody>") || !strings.Contains(strings.Split(body, "<tbody>")[1], "sensitive/lr") {
+		if code != http.StatusOK || !strings.Contains(body, "sensitive/lr") {
 			t.Fatalf("query %q: status %d, body %s", query, code, body)
 		}
+		if strings.Contains(body, "<html") {
+			t.Fatalf("search should return a sidebar fragment: %s", body)
+		}
 	}
-	code, body := get(t, h, "/search?q=no-such-keyword")
-	if code != http.StatusOK || !strings.Contains(body, "没有找到匹配的实验") {
-		t.Fatalf("empty results: %d", code)
+	for _, query := range []string{"UniqueNoteNeedle", "no-such-keyword"} {
+		code, body := get(t, h, "/search?q="+url.QueryEscape(query))
+		if code != http.StatusOK || !strings.Contains(body, "没有匹配的实验") {
+			t.Fatalf("query %q: status %d, body %s", query, code, body)
+		}
 	}
 }
