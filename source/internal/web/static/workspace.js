@@ -30,14 +30,29 @@
     var states; try { states=JSON.parse(get('exp.tree.folders','{}')); } catch (_) { states={}; }
     states[folder.dataset.treePath]=!folder.open; put('exp.tree.folders',JSON.stringify(states));
   });
-  document.addEventListener('DOMContentLoaded', function () { apply(); restoreTree(); });
-  document.addEventListener('htmx:load', function () { apply(); restoreTree(); });
+  function restoreRuns() {
+    var states; try { states=JSON.parse(get('exp.tree.runs','{}')); } catch (_) { states={}; }
+    document.querySelectorAll('[data-run-toggle]').forEach(function(button) {
+      var list=document.getElementById(button.getAttribute('aria-controls')); if(!list) return;
+      var id=button.dataset.runToggle;
+      var expanded=Object.prototype.hasOwnProperty.call(states,id) ? !!states[id] : !!list.querySelector('.run-link.is-active');
+      list.hidden=!expanded; button.setAttribute('aria-expanded',String(expanded));
+      button.setAttribute('aria-label',(expanded ? '收起 ' : '展开 ') + (button.dataset.runName || '') + ' 的运行记录');
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function () { apply(); restoreTree(); restoreRuns(); });
+  document.addEventListener('htmx:load', function () { apply(); restoreTree(); restoreRuns(); });
   window.addEventListener('resize', apply);
   document.addEventListener('change', function (event) {
     if (event.target.matches('input[name="theme"]')) { put(keys.theme, event.target.value); apply(); }
   });
   document.addEventListener('click', function (event) {
     var target = event.target;
+    var runToggle=target.closest('[data-run-toggle]'); if (runToggle) {
+      var states; try { states=JSON.parse(get('exp.tree.runs','{}')); } catch (_) { states={}; }
+      states[runToggle.dataset.runToggle]=runToggle.getAttribute('aria-expanded') !== 'true';
+      put('exp.tree.runs',JSON.stringify(states)); restoreRuns();
+    }
     if (target.closest('[data-toggle-right]')) { var app=document.getElementById('app'); put(keys.rightClosed, app.classList.contains('right-collapsed') ? '0' : '1'); apply(); }
     var open=target.closest('[data-open-dialog]'); if (open) { var toOpen=document.getElementById(open.dataset.openDialog); var current=open.closest('details.menu'); if(current)current.open=false; if(toOpen)toOpen.showModal(); }
     var conclude=target.closest('[data-conclude-url]'); if(conclude) { var form=document.getElementById('conclude-form'), dialog=document.getElementById('conclude-dialog'); form.action=conclude.dataset.concludeUrl; var menu=conclude.closest('details'); if(menu)menu.open=false; dialog.showModal(); }

@@ -229,7 +229,10 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tree := buildTreeView(core.BuildTree(exps), "")
-	s.markAttached(tree)
+	if err := s.populateTree(tree, ""); err != nil {
+		s.internalError(w, err)
+		return
+	}
 	s.render(w, http.StatusOK, "index", indexData{
 		Project:      s.projectName(),
 		Tree:         tree,
@@ -275,6 +278,26 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 	}
 	if diffErr != nil {
 		data.DiffErr = diffErr.Error()
+	}
+	if selected := r.URL.Query().Get("run"); selected != "" {
+		runs, err := s.kernel.ListRuns(exp)
+		if err != nil {
+			s.internalError(w, err)
+			return
+		}
+		for _, run := range runs {
+			if run.ID == selected {
+				data.SelectedRun = run
+				break
+			}
+		}
+		if data.SelectedRun == nil {
+			s.notFound(w)
+			return
+		}
+		s.kernel.Reconcile(data.SelectedRun)
+		data.SelectedLog, _, data.SelectedLogTruncated = readLogTail(s.kernel.LogPath(data.SelectedRun.ID))
+		markSelectedRun(tree, exp.PathString(), selected)
 	}
 	running, err := s.kernel.RunningRun(exp)
 	if err != nil {
@@ -499,7 +522,9 @@ func (s *Server) viewTree(active string) (*treeNode, error) {
 		return nil, err
 	}
 	tree := buildTreeView(core.BuildTree(exps), active)
-	s.markAttached(tree)
+	if err := s.populateTree(tree, ""); err != nil {
+		return nil, err
+	}
 	return tree, nil
 }
 
@@ -554,6 +579,7 @@ func onlyGet(w http.ResponseWriter, r *http.Request) bool {
 
 // expView 是实验在页面上的展示投影。
 type expView struct {
+	ID           string
 	Path         string
 	URL          string
 	EditURL      string
@@ -572,7 +598,12 @@ type expView struct {
 }
 
 // treeNode 是左侧树的展示节点；目录节点没有 Exp。
+type runView struct {
+	ID, URL, Status string
+	Active          bool
+}
 type treeNode struct {
+	Runs     []runView
 	Path     string
 	Name     string
 	Exp      *expView
@@ -590,20 +621,23 @@ type indexData struct {
 }
 
 type detailData struct {
-	Project      string
-	Tree         *treeNode
-	Exp          *expView
-	Note         string
-	Diff         string
-	DiffLines    []diffLine
-	DiffErr      string
-	Worktree     string
-	Attached     bool
-	Error        string
-	RunID        string
-	LogText      string
-	LogOffset    int64
-	LogTruncated bool
+	SelectedRun          *core.Run
+	SelectedLog          string
+	SelectedLogTruncated bool
+	Project              string
+	Tree                 *treeNode
+	Exp                  *expView
+	Note                 string
+	Diff                 string
+	DiffLines            []diffLine
+	DiffErr              string
+	Worktree             string
+	Attached             bool
+	Error                string
+	RunID                string
+	LogText              string
+	LogOffset            int64
+	LogTruncated         bool
 }
 
 type editData struct {
@@ -626,6 +660,7 @@ func (s *Server) projectName() string {
 
 func newExpView(exp *core.Experiment) *expView {
 	return &expView{
+		ID:           exp.ID,
 		Path:         exp.PathString(),
 		URL:          experimentURL(exp.Path),
 		EditURL:      editExperimentURL(exp.Path),
@@ -714,24 +749,47 @@ func flattenTree(node *treeNode) []*expView {
 	return out
 }
 
-// markAttached adds the worktree state to experiment menus.
-func (s *Server) markAttached(tree *treeNode) {
+// populateTree loads the attached state and the runs shown under each experiment.
+func (s *Server) populateTree(tree *treeNode, activeRun string) error {
 	worktrees, err := s.kernel.Attached()
 	if err != nil {
-		return
+		return err
 	}
 	branches := map[string]bool{}
 	for _, branch := range worktrees {
 		branches[branch] = true
 	}
-	var walk func(*treeNode)
-	walk = func(n *treeNode) {
+	var walk func(*treeNode) error
+	walk = func(n *treeNode) error {
 		if n.Exp != nil {
 			n.Exp.Attached = branches[n.Exp.Branch]
+			exp := &core.Experiment{ID: n.Exp.ID}
+			runs, err := s.kernel.ListRuns(exp)
+			if err != nil {
+				return err
+			}
+			for i := len(runs) - 1; i >= 0; i-- {
+				run := runs[i]
+				n.Runs = append(n.Runs, runView{ID: run.ID, Status: run.Status, URL: n.Exp.URL + "?run=" + url.QueryEscape(run.ID), Active: n.Active && run.ID == activeRun})
+			}
 		}
 		for _, child := range n.Children {
-			walk(child)
+			if err := walk(child); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-	walk(tree)
+	return walk(tree)
+}
+func markSelectedRun(tree *treeNode, path, runID string) {
+	if tree.Exp != nil && tree.Exp.Path == path {
+		for i := range tree.Runs {
+			tree.Runs[i].Active = tree.Runs[i].ID == runID
+		}
+		tree.Active = false
+	}
+	for _, child := range tree.Children {
+		markSelectedRun(child, path, runID)
+	}
 }
