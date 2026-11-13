@@ -41,6 +41,9 @@ const helpText = `ExpDeck — 用 git 分支管理实验，用普通文件记录
   show <exp|run> [--diff]       查看实验，或某个 run；--diff 显示该 run 自己的改动
   attach <exp> [dir]            把分支检出成工作树
   detach <exp>                  收回工作树（未提交改动会固化成 patch）
+  delete <exp> --yes            删除实验及分支（拒绝有数据风险的工作树）
+  export <exp>... --output file.zip [--logs] [--artifacts]
+                                导出代表 run；单实验可用 --runs 指定 run
   adopt <branch> [--why "..."]  把已经存在、但没登记的 exp/ 分支收编成实验
 
 记录
@@ -52,6 +55,8 @@ const helpText = `ExpDeck — 用 git 分支管理实验，用普通文件记录
   reopen <exp>                  重新打开已结案的实验
 
 运行
+  run-outcome <run> valid|invalid|auto  标记 run 的有效性
+  representative <exp> <run|auto>     选择代表 run
   run <exp> [--gpu N]           起一次运行，立刻返回 run 标识
   wait --run <id> [--timeout 秒]  阻塞到结束
   status                        正在跑的实验
