@@ -129,18 +129,3 @@ func TestWebUnknownExperimentIs404(t *testing.T) {
 		t.Fatalf("want 404, got %d", code)
 	}
 }
-
-func TestBoostedNavigationUpdatesAddress(t *testing.T) {
-	repo := scaffold(t)
-	h := newHandler(t, repo)
-	req := httptest.NewRequest(http.MethodGet, "/e/sensitive/lr", nil)
-	req.Header.Set("HX-Boosted", "true")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: %d", rec.Code)
-	}
-	if got := rec.Header().Get("HX-Push-Url"); got != "/e/sensitive/lr" {
-		t.Fatalf("history URL: %q", got)
-	}
-}

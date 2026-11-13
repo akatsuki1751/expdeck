@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,7 +12,6 @@ var expActions = map[string]bool{
 	"detach":   true,
 	"conclude": true,
 	"reopen":   true,
-	"rename":   true,
 }
 
 // splitAction 把 "a/b/detach" 拆成 (action="detach", ref="a/b")。
@@ -45,8 +43,6 @@ func (s *Server) handleExpAction(w http.ResponseWriter, r *http.Request, ref, ac
 		err = s.kernel.Conclude(exp, r.PostFormValue("decision"), r.PostFormValue("why"))
 	case "reopen":
 		err = s.kernel.Reopen(exp)
-	case "rename":
-		err = s.kernel.Rename(exp, r.PostFormValue("path"))
 	default:
 		s.notFound(w)
 		return
@@ -76,33 +72,6 @@ func (s *Server) handleAdopt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, newExpView(exp).URL, http.StatusSeeOther)
-}
-
-func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
-	if _, _, err := s.kernel.Backup(); err != nil {
-		s.redirectIndexError(w, r, err)
-		return
-	}
-	http.Redirect(w, r, "/?ok="+url.QueryEscape("记录已提交到 book 分支"), http.StatusSeeOther)
-}
-
-func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
-	force := r.PostFormValue("force") != ""
-	if _, err := s.kernel.Restore(force); err != nil {
-		s.redirectIndexError(w, r, err)
-		return
-	}
-	http.Redirect(w, r, "/?ok="+url.QueryEscape("记录已从 book 分支恢复"), http.StatusSeeOther)
-}
-
-func (s *Server) handleGC(w http.ResponseWriter, r *http.Request) {
-	removed, err := s.kernel.GC(false)
-	if err != nil {
-		s.redirectIndexError(w, r, err)
-		return
-	}
-	notice := fmt.Sprintf("清理了 %d 个未被引用的产物", removed)
-	http.Redirect(w, r, "/?ok="+url.QueryEscape(notice), http.StatusSeeOther)
 }
 
 // redirectIndexError 把失败原因带回列表页。
