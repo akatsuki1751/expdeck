@@ -31,7 +31,10 @@ func TestExperimentInspectorDoesNotContainOperationForms(t *testing.T) {
 	if strings.Contains(panel, "<form") || strings.Contains(panel, "data-toggle-right") {
 		t.Fatal("inspector contains operations or toggle")
 	}
-	if !strings.Contains(body, `data-conclude-url=`) {
-		t.Fatal("conclude action missing from menu")
+	if strings.Contains(body, `data-conclude-url=`) {
+		t.Fatal("legacy conclude action should not be in menu")
+	}
+	if !strings.Contains(body, "删除实验") {
+		t.Fatal("delete action missing")
 	}
 }
