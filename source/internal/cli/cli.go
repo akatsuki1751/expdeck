@@ -122,6 +122,14 @@ func Run(env Env, args []string) int {
 		res, err = a.cmdRestore(rest)
 	case "serve":
 		res, err = a.cmdServe(rest)
+	case "run-outcome":
+		res, err = a.cmdRunOutcome(rest)
+	case "representative":
+		res, err = a.cmdRepresentative(rest)
+	case "delete":
+		res, err = a.cmdDelete(rest)
+	case "export":
+		res, err = a.cmdExport(rest)
 	case "run":
 		res, err = a.cmdRun(rest)
 	case "status":
