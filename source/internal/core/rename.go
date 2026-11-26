@@ -3,6 +3,7 @@ package core
 import (
 	"expdeck/internal/records"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -52,6 +53,11 @@ func (k *Kernel) Rename(exp *Experiment, newPath string) error {
 		return fmt.Errorf("%w: 分支 %q 已存在", ErrConflict, newBranch)
 	}
 	oldBranch := current.Branch
+	metaPath := filepath.Join(k.Store.ExpDir(current.ID), "meta.json")
+	previous, err := os.ReadFile(metaPath)
+	if err != nil {
+		return err
+	}
 	if _, err := k.Repo.Git("branch", "-m", oldBranch, newBranch); err != nil {
 		return fmt.Errorf("%w: 重命名分支失败: %v", ErrConflict, err)
 	}
@@ -61,6 +67,14 @@ func (k *Kernel) Rename(exp *Experiment, newPath string) error {
 			return fmt.Errorf("写入记录失败: %v；恢复分支失败，请手动恢复 %s -> %s: %v", err, newBranch, oldBranch, rollback)
 		}
 		return err
+	}
+	if err := k.Repo.RenameBookExperiment(current.ID, segs, newBranch); err != nil {
+		restoreErr := records.WriteFile(metaPath, previous)
+		_, branchErr := k.Repo.Git("branch", "-m", newBranch, oldBranch)
+		if restoreErr != nil || branchErr != nil {
+			return fmt.Errorf("更新 book 失败: %v；回滚记录: %v；回滚分支: %v", err, restoreErr, branchErr)
+		}
+		return fmt.Errorf("更新 book 失败，已撤销重命名: %w", err)
 	}
 	exp.Path, exp.Branch = current.Path, current.Branch
 	return nil
