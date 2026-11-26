@@ -513,7 +513,7 @@ func (a *app) cmdShow(args []string) (result, error) {
 			fmt.Fprintf(w, "status    %s\n", run.Status)
 			fmt.Fprintf(w, "command   %s\n", run.Command)
 			if run.Snapshot != "" {
-				fmt.Fprintf(w, "snapshot  %s\n", run.Snapshot)
+				fmt.Fprintf(w, "commit    %s\n", run.Snapshot)
 			}
 			if run.ExitCode != nil {
 				fmt.Fprintf(w, "exit      %d\n", *run.ExitCode)

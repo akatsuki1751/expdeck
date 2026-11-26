@@ -58,16 +58,16 @@ const helpText = `ExpDeck — 用 git 分支管理实验，用普通文件记录
 运行
   run-outcome <run> valid|invalid|auto  标记 run 的有效性
   representative <exp> <run|auto>     选择代表 run
-  run <exp> [--gpu N]           起一次运行，立刻返回 run 标识
+  run <exp> [--gpu N]           运行已提交的实验代码，立刻返回 run 标识
   wait --run <id> [--timeout 秒]  阻塞到结束
   status                        正在跑的实验
   interrupt --run <id>          中断运行
 
 维护
-  backup                        把记录提交成 book 分支
-  restore [--force]             从 book 恢复记录
+  backup                        旧版记录备份（仅兼容已有仓库）
+  restore [--force]             恢复旧版记录备份
   gc                            回收没人引用的产物
-  doctor                        报告漂移（孤儿实验、未登记分支、失效快照）
+  doctor                        报告漂移（孤儿实验、未登记分支、失效的运行提交）
 
 网页
   serve [--addr 127.0.0.1:8787] 启动网页，打印带一次性令牌的地址

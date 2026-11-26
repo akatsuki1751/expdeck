@@ -12,6 +12,12 @@ func withArtifactGlob(t *testing.T, repo string) {
 	if err := os.WriteFile(filepath.Join(repo, "exp.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	wt := worktreeOf(repo)
+	if err := os.WriteFile(filepath.Join(wt, ".gitignore"), []byte("out/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, wt, "add", ".gitignore")
+	git(t, wt, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "ignore output")
 }
 
 func TestRunCollectsNewArtifacts(t *testing.T) {
@@ -75,6 +81,8 @@ func TestSecondFailedRunHasNoArtifacts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(worktreeOf(repo), "run.sh"), []byte("exit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	git(t, worktreeOf(repo), "add", "run.sh")
+	git(t, worktreeOf(repo), "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "change run script")
 	_, payload = runBinJSON(t, repo, "run", "sensitive/lr")
 	second := runField(t, payload)["id"].(string)
 	if code, payload := runBinJSON(t, repo, "wait", "--run", second, "--timeout", "20"); code != 0 {

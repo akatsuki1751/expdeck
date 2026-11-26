@@ -10,24 +10,39 @@ func (k *Kernel) SnapRef(exp *Experiment) string {
 	return "refs/exp/snap/" + exp.ID
 }
 
-// Snapshot 给工作树拍一张快照，并把引用移到最新的那张上。
-// 引用不能省：没有引用指向的提交会被 git 的常规清理回收。
+// Snapshot records the committed experiment branch HEAD without making a commit.
+// The previous run's commit remains the comparison base, including legacy snapshots.
 func (k *Kernel) Snapshot(exp *Experiment, worktree string) (commit, base string, err error) {
-	if existing, verifyErr := k.Repo.Git("rev-parse", "--verify", "--quiet", k.SnapRef(exp)); verifyErr == nil {
-		base = strings.TrimSpace(existing)
+	dirty, err := k.Repo.IsDirty(worktree)
+	if err != nil {
+		return "", "", err
 	}
-	if base == "" {
+	if dirty {
+		return "", "", fmt.Errorf("%w: 工作树有未提交的修改或未跟踪文件，请先手动提交后再运行", ErrConflict)
+	}
+	branch, err := k.Repo.Git("-C", worktree, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil || strings.TrimSpace(branch) != exp.Branch {
+		return "", "", fmt.Errorf("%w: 工作树未检出实验分支 %q", ErrConflict, exp.Branch)
+	}
+	head, err := k.Repo.Git("-C", worktree, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return "", "", fmt.Errorf("%w: 无法读取实验提交: %v", ErrConflict, err)
+	}
+	commit = strings.TrimSpace(head)
+	runs, err := k.ListRuns(exp)
+	if err != nil {
+		return "", "", err
+	}
+	if len(runs) > 0 {
+		base = runs[len(runs)-1].Snapshot
+		if base == "" {
+			return "", "", fmt.Errorf("%w: 上一次 run 缺少提交记录，无法比较", ErrConflict)
+		}
+	} else {
 		base, _, err = k.ExperimentBase(exp)
 		if err != nil {
 			return "", "", err
 		}
-	}
-	commit, err = k.Repo.Snapshot(worktree, base)
-	if err != nil {
-		return "", "", err
-	}
-	if _, err := k.Repo.Git("update-ref", k.SnapRef(exp), commit); err != nil {
-		return "", "", fmt.Errorf("更新快照引用失败: %w", err)
 	}
 	return commit, base, nil
 }

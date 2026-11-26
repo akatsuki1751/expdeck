@@ -69,7 +69,7 @@ func TestWebAuditLogsResultsWithoutFormValues(t *testing.T) {
 	}
 }
 
-func TestRenameUpdatesExistingBookIdentityOnly(t *testing.T) {
+func TestRenameLeavesLegacyBookUntouched(t *testing.T) {
 	repo := scaffold(t)
 	k, err := core.Open(repo)
 	if err != nil {
@@ -105,7 +105,7 @@ func TestRenameUpdatesExistingBookIdentityOnly(t *testing.T) {
 	if err = json.Unmarshal([]byte(git(t, repo, "show", fmt.Sprintf("book:exps/%s/meta.json", exp.ID))), &saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.PathString() != "baseline/new-name" || saved.Branch != "exp/baseline/new-name" || saved.Hypothesis != original {
+	if saved.PathString() != "sensitive/lr" || saved.Branch != "exp/sensitive/lr" || saved.Hypothesis != original {
 		t.Fatalf("backup changed unexpectedly: %+v", saved)
 	}
 }

@@ -44,11 +44,6 @@ func (k *Kernel) StartRun(exp *Experiment, gpu int) (*Run, error) {
 	if config.RunCmd == "" {
 		return nil, fmt.Errorf("%w: exp.toml 里缺少 [run] cmd", ErrInvalid)
 	}
-	if gpu > 0 {
-		if err := k.claimGPU(gpu); err != nil {
-			return nil, err
-		}
-	}
 	run := &Run{
 		ID:        NewRunID(),
 		Exp:       exp.ID,
@@ -60,7 +55,12 @@ func (k *Kernel) StartRun(exp *Experiment, gpu int) (*Run, error) {
 	}
 	snapshot, base, err := k.Snapshot(exp, worktree)
 	if err != nil {
-		return nil, fmt.Errorf("%w: 打快照失败: %v", ErrConflict, err)
+		return nil, fmt.Errorf("%w: 检查实验提交失败: %v", ErrConflict, err)
+	}
+	if gpu > 0 {
+		if err := k.claimGPU(gpu); err != nil {
+			return nil, err
+		}
 	}
 	run.Snapshot = snapshot
 	run.Base = base

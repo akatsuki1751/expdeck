@@ -58,39 +58,25 @@ func (k *Kernel) Doctor() ([]Drift, error) {
 		})
 	}
 
-	// 3. stale_snapshot：run 记了快照，但提交或实验的快照引用已经解析不到。
+	// Runs can point to normal branch commits or to legacy snapshot chains.
 	for _, exp := range exps {
 		runs, err := k.ListRuns(exp)
 		if err != nil {
 			return nil, fmt.Errorf("%w: 读取实验 %s 的 run 记录失败: %v", ErrConflict, exp.PathString(), err)
 		}
-		snapRuns := 0
-		ref := k.SnapRef(exp)
-		refOK := true
 		for _, run := range runs {
 			if run.Snapshot == "" {
 				continue
 			}
-			snapRuns++
 			if _, err := k.Repo.Git("cat-file", "-e", run.Snapshot+"^{commit}"); err != nil {
-				drifts = append(drifts, Drift{
-					Kind:    DriftStaleSnapshot,
-					Subject: run.ID,
-					Detail:  fmt.Sprintf("run 记录的快照提交 %s 不存在", run.Snapshot),
-				})
+				drifts = append(drifts, Drift{Kind: DriftStaleSnapshot, Subject: run.ID, Detail: fmt.Sprintf("run 记录的提交 %s 不存在", run.Snapshot)})
+				continue
 			}
-			if snapRuns == 1 {
-				if _, err := k.Repo.Git("rev-parse", "--verify", "--quiet", ref); err != nil {
-					refOK = false
-				}
+			_, branchErr := k.Repo.Git("merge-base", "--is-ancestor", run.Snapshot, exp.Branch)
+			_, legacyErr := k.Repo.Git("merge-base", "--is-ancestor", run.Snapshot, k.SnapRef(exp))
+			if branchErr != nil && legacyErr != nil {
+				drifts = append(drifts, Drift{Kind: DriftStaleSnapshot, Subject: run.ID, Detail: "run 提交不在实验分支或旧快照引用中，可能无法长期保留"})
 			}
-		}
-		if snapRuns > 0 && !refOK {
-			drifts = append(drifts, Drift{
-				Kind:    DriftStaleSnapshot,
-				Subject: exp.PathString(),
-				Detail:  fmt.Sprintf("实验快照引用 %s 无法解析（%d 个 run 记录了快照）", ref, snapRuns),
-			})
 		}
 	}
 
