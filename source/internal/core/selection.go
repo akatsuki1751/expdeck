@@ -3,6 +3,7 @@ package core
 import (
 	"expdeck/internal/records"
 	"fmt"
+	"strings"
 )
 
 // RunValid preserves legacy finished runs as valid unless explicitly marked.
@@ -24,17 +25,23 @@ func (k *Kernel) Representative(exp *Experiment) (*Run, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	run, manual := SelectRepresentative(exp, runs)
+	return run, manual, nil
+}
+
+// SelectRepresentative selects from an already loaded, ordered run list.
+func SelectRepresentative(exp *Experiment, runs []*Run) (*Run, bool) {
 	for _, run := range runs {
 		if exp.RepresentativeRun != "" && run.ID == exp.RepresentativeRun && RunValid(run) {
-			return run, true, nil
+			return run, true
 		}
 	}
 	for i := len(runs) - 1; i >= 0; i-- {
 		if RunValid(runs[i]) {
-			return runs[i], false, nil
+			return runs[i], false
 		}
 	}
-	return nil, false, nil
+	return nil, false
 }
 
 func (k *Kernel) SetRunOutcome(exp *Experiment, id, outcome string) error {
@@ -91,5 +98,20 @@ func (k *Kernel) SetRepresentative(exp *Experiment, id string) error {
 		}
 	}
 	current.RepresentativeRun = id
+	return records.WriteJSON(k.metaPath(current), current)
+}
+
+// SetHypothesis updates only the current experiment's hypothesis.
+func (k *Kernel) SetHypothesis(exp *Experiment, hypothesis string) error {
+	lock, err := k.Store.AcquireLock()
+	if err != nil {
+		return err
+	}
+	defer lock.Unlock()
+	current, err := k.Find(exp.ID)
+	if err != nil {
+		return err
+	}
+	current.Hypothesis = strings.TrimSpace(hypothesis)
 	return records.WriteJSON(k.metaPath(current), current)
 }

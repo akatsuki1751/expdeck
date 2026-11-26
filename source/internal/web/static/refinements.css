@@ -148,3 +148,12 @@ body { font-family:var(--ui-font); font-size:15px; line-height:1.5; }
 .export-run-choice select { max-width:100%; color:var(--fg); background:var(--surface); border:1px solid var(--edge); border-radius:5px; }
 .run-review { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
 .run-review form { margin:0; }
+
+/* The full-width title doubles as the experiment rename entry point. */
+.detail-head > div { flex:1; min-width:0; }
+.experiment-title-wrap { width:100%; }
+.main-head h1.experiment-title { cursor:text; border-radius:7px; padding:6px 10px; margin:0 -10px; overflow-wrap:anywhere; }
+.main-head h1.experiment-title:hover,.main-head h1.experiment-title:focus-visible { background:var(--hover); outline:none; }
+.experiment-title[hidden],.experiment-rename[hidden] { display:none; }
+.experiment-rename { display:flex; gap:8px; width:100%; align-items:center; }
+.experiment-rename input { flex:1; min-width:0; padding:7px 10px; color:var(--fg); background:var(--surface); border:1px solid var(--edge); border-radius:6px; font:600 22px/1.4 var(--ui-font); }

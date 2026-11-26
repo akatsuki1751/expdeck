@@ -122,6 +122,9 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		case "/run-outcome":
 			s.handleOutcome(w, r)
 			return
+		case "/hypothesis":
+			s.handleHypothesis(w, r)
+			return
 		case "/representative":
 			s.handleRepresentative(w, r)
 			return
@@ -647,6 +650,7 @@ func onlyGet(w http.ResponseWriter, r *http.Request) bool {
 type expView struct {
 	ID                   string
 	Path                 string
+	PathSegments         []string
 	URL                  string
 	EditURL              string
 	RunURL               string
@@ -658,7 +662,6 @@ type expView struct {
 	RenameURL            string
 	DeleteURL            string
 	Attached             bool
-	Dirty                bool
 	Branch               string
 	Hypothesis           string
 	Representative       string
@@ -673,12 +676,13 @@ type runView struct {
 	Active          bool
 }
 type treeNode struct {
-	Runs     []runView
-	Path     string
-	Name     string
-	Exp      *expView
-	Active   bool
-	Children []*treeNode
+	Runs       []runView
+	Experiment *core.Experiment
+	Path       string
+	Name       string
+	Exp        *expView
+	Active     bool
+	Children   []*treeNode
 }
 
 type indexData struct {
@@ -736,6 +740,7 @@ func newExpView(exp *core.Experiment) *expView {
 	return &expView{
 		ID:           exp.ID,
 		Path:         exp.PathString(),
+		PathSegments: append([]string(nil), exp.Path...),
 		URL:          experimentURL(exp.Path),
 		EditURL:      editExperimentURL(exp.Path),
 		RunURL:       experimentActionURL(exp.Path, "run"),
@@ -803,6 +808,7 @@ func buildTreeView(node *core.Node, active string) *treeNode {
 	}
 	if node.Exp != nil {
 		view.Exp = newExpView(node.Exp)
+		view.Experiment = node.Exp
 		view.Active = node.Exp.PathString() == active
 	}
 	return view
@@ -837,36 +843,16 @@ func (s *Server) populateTree(tree *treeNode, activeRun string) error {
 	var walk func(*treeNode) error
 	walk = func(n *treeNode) error {
 		if n.Exp != nil {
-			current, err := s.kernel.Find(n.Exp.ID)
+			runs, err := s.kernel.ListRuns(n.Experiment)
 			if err != nil {
 				return err
 			}
-			rep, manual, err := s.kernel.Representative(current)
-			if err != nil {
-				return err
-			}
+			rep, manual := core.SelectRepresentative(n.Experiment, runs)
 			if rep != nil {
 				n.Exp.Representative = rep.ID
 				n.Exp.RepresentativeManual = manual
 			}
 			n.Exp.Attached = branches[n.Exp.Branch]
-			if n.Exp.Attached {
-				for dir, branch := range worktrees {
-					if branch == n.Exp.Branch {
-						status, err := s.kernel.Repo.Git("-C", dir, "status", "--porcelain", "--ignored")
-						if err != nil {
-							return err
-						}
-						n.Exp.Dirty = strings.TrimSpace(status) != ""
-						break
-					}
-				}
-			}
-			exp := &core.Experiment{ID: n.Exp.ID}
-			runs, err := s.kernel.ListRuns(exp)
-			if err != nil {
-				return err
-			}
 			for i := len(runs) - 1; i >= 0; i-- {
 				run := runs[i]
 				n.Runs = append(n.Runs, runView{ID: run.ID, Status: run.Status, URL: n.Exp.URL + "?run=" + url.QueryEscape(run.ID), Active: n.Active && run.ID == activeRun})

@@ -120,3 +120,29 @@ func TestWebBackupButton(t *testing.T) {
 		t.Fatalf("book branch missing after web backup: %s", out)
 	}
 }
+
+func TestWebEditHypothesis(t *testing.T) {
+	repo := scaffold(t)
+	h := newHandler(t, repo)
+	_, payload := runJSON(t, repo, "show", "sensitive/lr")
+	exp := dataOf(t, payload)["experiment"].(map[string]any)
+	id := exp["id"].(string)
+	for _, hypothesis := range []string{"", "补充后的假设"} {
+		rec := postForm(t, h, "/hypothesis", url.Values{"exp": {id}, "hypothesis": {hypothesis}})
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("save hypothesis: got %d: %s", rec.Code, rec.Body.String())
+		}
+		_, payload = runJSON(t, repo, "show", "sensitive/lr")
+		exp = dataOf(t, payload)["experiment"].(map[string]any)
+		if exp["hypothesis"] != hypothesis {
+			t.Fatalf("hypothesis = %v, want %q", exp["hypothesis"], hypothesis)
+		}
+		_, body := get(t, h, "/e/sensitive/lr")
+		if hypothesis == "" && !strings.Contains(body, "补充假设") {
+			t.Fatal("missing entry to add hypothesis")
+		}
+		if hypothesis != "" && !strings.Contains(body, hypothesis) {
+			t.Fatal("updated hypothesis missing from detail page")
+		}
+	}
+}

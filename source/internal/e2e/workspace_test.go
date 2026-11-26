@@ -1,6 +1,9 @@
 package e2e
 
 import (
+	"encoding/json"
+	"expdeck/internal/core"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -63,5 +66,59 @@ func TestWebAuditLogsResultsWithoutFormValues(t *testing.T) {
 	}
 	if strings.Contains(text, "private hypothesis") {
 		t.Fatal("form value leaked into log")
+	}
+}
+
+func TestRenameUpdatesExistingBookIdentityOnly(t *testing.T) {
+	repo := scaffold(t)
+	k, err := core.Open(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp, err := k.Find("sensitive/lr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := exp.Hypothesis
+	if _, _, err = k.Backup(); err != nil {
+		t.Fatal(err)
+	}
+	if err = k.SetHypothesis(exp, "not yet backed up"); err != nil {
+		t.Fatal(err)
+	}
+	h := newHandler(t, repo)
+	rec := postForm(t, h, "/e/sensitive/lr/rename", url.Values{"path": {"baseline/new-name"}})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/e/baseline/new-name" {
+		t.Fatalf("rename: %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	current, err := k.Find(exp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Hypothesis != "not yet backed up" || current.Branch != "exp/baseline/new-name" {
+		t.Fatalf("current record: %+v", current)
+	}
+	if k.Repo.BranchExists("exp/sensitive/lr") || !k.Repo.BranchExists("exp/baseline/new-name") {
+		t.Fatal("branch not renamed")
+	}
+	var saved core.Experiment
+	if err = json.Unmarshal([]byte(git(t, repo, "show", fmt.Sprintf("book:exps/%s/meta.json", exp.ID))), &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.PathString() != "baseline/new-name" || saved.Branch != "exp/baseline/new-name" || saved.Hypothesis != original {
+		t.Fatalf("backup changed unexpectedly: %+v", saved)
+	}
+}
+func TestHypothesisCLIAndNavigation(t *testing.T) {
+	repo := scaffold(t)
+	if code, out := run(t, repo, "hypothesis", "sensitive/lr", "--text", "updated hypothesis"); code != 0 {
+		t.Fatalf("hypothesis: %s", out)
+	}
+	h := newHandler(t, repo)
+	code, body := get(t, h, "/e/sensitive/lr")
+	for _, want := range []string{"updated hypothesis", `data-inline-rename`, `/e/sensitive/lr/rename`, `<span>sensitive</span><span class="crumb-sep">/</span><span>lr</span>`} {
+		if code != http.StatusOK || !strings.Contains(body, want) {
+			t.Fatalf("missing %q: %d", want, code)
+		}
 	}
 }

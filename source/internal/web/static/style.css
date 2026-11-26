@@ -1015,3 +1015,13 @@ body.htmx-request {
 }
 
 }
+
+.hypothesis-heading { display:flex; align-items:start; justify-content:space-between; gap:16px; }
+.hypothesis-text { margin:16px 0 2px; font-size:16px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
+.hypothesis-editor summary { cursor:pointer; list-style:none; }
+.hypothesis-editor summary::-webkit-details-marker { display:none; }
+.hypothesis-editor[open] { flex:1; max-width:480px; }
+.hypothesis-editor form { display:grid; gap:10px; margin-top:12px; }
+.hypothesis-editor label { font-size:12px; color:#506257; }
+.hypothesis-editor textarea { width:100%; box-sizing:border-box; padding:10px; border:1px solid var(--line); border-radius:6px; font:inherit; resize:vertical; }
+.hypothesis-editor button { justify-self:start; }

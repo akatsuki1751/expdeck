@@ -104,6 +104,8 @@ func Run(env Env, args []string) int {
 		res, err = a.cmdGC(rest)
 	case "version":
 		res, err = a.cmdVersion(rest)
+	case "hypothesis":
+		res, err = a.cmdHypothesis(rest)
 	case "note":
 		res, err = a.cmdNote(rest)
 	case "open":

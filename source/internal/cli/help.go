@@ -47,6 +47,7 @@ const helpText = `ExpDeck — 用 git 分支管理实验，用普通文件记录
   adopt <branch> [--why "..."]  把已经存在、但没登记的 exp/ 分支收编成实验
 
 记录
+  hypothesis <exp> --text "..."  修改实验假设
   note <exp> --text "..."       替换整篇笔记
   note <exp> --append "..."     追加一段（带时间戳）
   note <exp> --print            打印笔记与版本号

@@ -116,3 +116,15 @@ func (s *Server) handleGC(w http.ResponseWriter, r *http.Request) {
 func (s *Server) redirectIndexError(w http.ResponseWriter, r *http.Request, err error) {
 	http.Redirect(w, r, "/?error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 }
+
+func (s *Server) handleHypothesis(w http.ResponseWriter, r *http.Request) {
+	exp, ok := s.findExperiment(w, r.PostFormValue("exp"))
+	if !ok {
+		return
+	}
+	if err := s.kernel.SetHypothesis(exp, r.PostFormValue("hypothesis")); err != nil {
+		s.redirectError(w, r, exp, err)
+		return
+	}
+	http.Redirect(w, r, newExpView(exp).URL, http.StatusSeeOther)
+}

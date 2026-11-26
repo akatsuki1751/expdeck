@@ -79,8 +79,28 @@
     } else if(event.target.matches('.export-check')) syncExportFolders();
     if (event.target.matches('input[name="theme"]')) { put(keys.theme, event.target.value); apply(); }
   });
+  function showInlineRename(title) {
+    var wrap=title.closest('.experiment-title-wrap'), form=wrap.querySelector('.experiment-rename');
+    title.hidden=true; form.hidden=false;
+    var input=form.querySelector('input'); input.focus(); input.select();
+  }
+  function cancelInlineRename(form) {
+    var title=form.closest('.experiment-title-wrap').querySelector('.experiment-title');
+    form.hidden=true; form.reset(); title.hidden=false; title.focus();
+  }
+  document.addEventListener('dblclick', function(event) {
+    var title=event.target.closest('[data-inline-rename]');
+    if(title) { event.preventDefault(); showInlineRename(title); }
+  });
+  document.addEventListener('keydown', function(event) {
+    var title=event.target.closest('[data-inline-rename]');
+    if(title && (event.key==='Enter' || event.key===' ')) { event.preventDefault(); showInlineRename(title); }
+    var form=event.target.closest('.experiment-rename');
+    if(form && event.key==='Escape') { event.preventDefault(); cancelInlineRename(form); }
+  });
   document.addEventListener('click', function (event) {
     var target = event.target;
+    var cancelRename=target.closest("[data-cancel-rename]"); if(cancelRename) cancelInlineRename(cancelRename.closest("form"));
     if(target.closest('.export-folder-check')) { event.stopPropagation(); return; }
     var exportToggle=target.closest('[data-export-toggle]');
     if(exportToggle) { var app=document.getElementById('app'); app.classList.toggle('export-mode'); var menu=exportToggle.closest('details'); if(menu) menu.open=false; if(app.classList.contains('export-mode')) { var input=document.getElementById('rail-search-input'); if(input) { input.value=''; updateSearch(); } } }
