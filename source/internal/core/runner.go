@@ -56,7 +56,7 @@ func (k *Kernel) StartRun(exp *Experiment, gpu int) (*Run, error) {
 		Command:   config.RunCmd,
 		Cwd:       worktree,
 		BootID:    BootID(),
-		StartedAt: time.Now().Format(time.RFC3339),
+		StartedAt: time.Now().Format(time.RFC3339Nano),
 	}
 	snapshot, base, err := k.Snapshot(exp, worktree)
 	if err != nil {

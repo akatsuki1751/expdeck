@@ -314,7 +314,6 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		s.internalError(w, err)
 		return
 	}
-	diff, diffErr := s.kernel.BranchDiff(exp)
 	worktree, err := s.worktreeOf(exp)
 	if err != nil {
 		s.internalError(w, err)
@@ -327,18 +326,13 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 	}
 	data := detailData{
 		Representative: representative, RepresentativeManual: manual,
-		Project:   s.projectName(),
-		Tree:      tree,
-		Exp:       newExpView(exp),
-		Note:      note,
-		Diff:      diff,
-		DiffLines: parseDiff(diff),
-		Worktree:  worktree,
-		Attached:  worktree != "",
-		Error:     r.URL.Query().Get("error"),
-	}
-	if diffErr != nil {
-		data.DiffErr = diffErr.Error()
+		Project:  s.projectName(),
+		Tree:     tree,
+		Exp:      newExpView(exp),
+		Note:     note,
+		Worktree: worktree,
+		Attached: worktree != "",
+		Error:    r.URL.Query().Get("error"),
 	}
 	if selected := r.URL.Query().Get("run"); selected != "" {
 		runs, err := s.kernel.ListRuns(exp)
@@ -346,8 +340,9 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 			s.internalError(w, err)
 			return
 		}
-		for _, run := range runs {
+		for i, run := range runs {
 			if run.ID == selected {
+				data.SelectedRunFirst = i == 0
 				data.SelectedRun = run
 				data.SelectedRunValid = core.RunValid(run)
 				if data.SelectedRunValid {
@@ -367,6 +362,29 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request, ref string
 		s.kernel.Reconcile(data.SelectedRun)
 		data.SelectedLog, _, data.SelectedLogTruncated = readLogTail(s.kernel.LogPath(data.SelectedRun.ID))
 		markSelectedRun(tree, exp.PathString(), selected)
+	}
+	var diff string
+	var diffErr error
+	if data.SelectedRun != nil {
+		data.DiffTitle = "相对上一次运行的改动"
+		if data.SelectedRunFirst || data.SelectedRun.Base == "" {
+			data.DiffTitle = "相对实验起点的改动"
+			if exp.StartCommit == "" {
+				_, data.DiffBaseInferred, _ = s.kernel.ExperimentBase(exp)
+			}
+		}
+		diff, diffErr = s.kernel.RunDiffForExperiment(exp, data.SelectedRun)
+	} else if representative != nil {
+		data.DiffTitle = "实验整体改动"
+		diff, data.DiffBaseInferred, diffErr = s.kernel.ExperimentRunDiff(exp, representative)
+	} else {
+		data.DiffTitle = "实验整体改动"
+		data.DiffEmpty = "暂无有效运行，无法确定实验最终改动。"
+	}
+	data.Diff = diff
+	data.DiffLines = parseDiff(diff)
+	if diffErr != nil {
+		data.DiffErr = diffErr.Error()
 	}
 	running, err := s.kernel.RunningRun(exp)
 	if err != nil {
@@ -695,6 +713,10 @@ type indexData struct {
 }
 
 type detailData struct {
+	SelectedRunFirst     bool
+	DiffTitle            string
+	DiffEmpty            string
+	DiffBaseInferred     bool
 	Representative       *core.Run
 	RepresentativeManual bool
 	SelectedRunValid     bool

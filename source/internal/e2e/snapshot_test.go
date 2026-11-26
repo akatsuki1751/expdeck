@@ -1,6 +1,9 @@
 package e2e
 
 import (
+	"expdeck/internal/core"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,5 +83,117 @@ func TestSecondRunDiffShowsOnlyItsOwnChanges(t *testing.T) {
 	}
 	if strings.Contains(diff, "run.sh") {
 		t.Fatalf("diff should not repeat the baseline files:\n%s", diff)
+	}
+}
+
+func TestWebRunAndRepresentativeDiffs(t *testing.T) {
+	repo := runnable(t, "echo ok\n")
+	defer os.RemoveAll(attachRoot(repo))
+	tree := worktreeOf(repo)
+	runOne := func(file string) string {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(tree, file), []byte("content "+file+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		code, payload := runBinJSON(t, repo, "run", "sensitive/lr")
+		if code != 0 {
+			t.Fatalf("run: %v", payload)
+		}
+		id := runField(t, payload)["id"].(string)
+		if code, payload = runBinJSON(t, repo, "wait", "--run", id, "--timeout", "20"); code != 0 {
+			t.Fatalf("wait: %v", payload)
+		}
+		return id
+	}
+	first := runOne("first-only.txt")
+	second := runOne("second-only.txt")
+	third := runOne("third-only.txt")
+	h := newHandler(t, repo)
+	check := func(path string, present, absent []string) {
+		t.Helper()
+		code, body := get(t, h, path)
+		if code != http.StatusOK {
+			t.Fatalf("status %d: %s", code, body)
+		}
+		for _, x := range present {
+			if !strings.Contains(body, x) {
+				t.Errorf("%s missing %q", path, x)
+			}
+		}
+		for _, x := range absent {
+			if strings.Contains(body, x) {
+				t.Errorf("%s unexpectedly contains %q", path, x)
+			}
+		}
+	}
+	check("/e/sensitive/lr?run="+url.QueryEscape(first), []string{"相对实验起点的改动", "first-only.txt"}, []string{"second-only.txt", "third-only.txt"})
+	check("/e/sensitive/lr?run="+url.QueryEscape(second), []string{"相对上一次运行的改动", "second-only.txt"}, []string{"first-only.txt", "third-only.txt"})
+	check("/e/sensitive/lr", []string{"实验整体改动", "first-only.txt", "second-only.txt", "third-only.txt"}, []string{"run.sh"})
+	k, err := core.Open(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp, err := k.Find("sensitive/lr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = k.SetRunOutcome(exp, third, "invalid"); err != nil {
+		t.Fatal(err)
+	}
+	check("/e/sensitive/lr", []string{"first-only.txt", "second-only.txt"}, []string{"third-only.txt", "run.sh"})
+	if err = k.SetRepresentative(exp, first); err != nil {
+		t.Fatal(err)
+	}
+	check("/e/sensitive/lr", []string{"first-only.txt"}, []string{"second-only.txt", "third-only.txt", "run.sh"})
+}
+
+func TestFirstRunComparesWithCreationCommit(t *testing.T) {
+	repo := runnable(t, "echo ok\n")
+	defer os.RemoveAll(attachRoot(repo))
+	wt := worktreeOf(repo)
+	if err := os.WriteFile(filepath.Join(wt, "committed-after-branch.txt"), []byte("new code\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, wt, "add", "committed-after-branch.txt")
+	git(t, wt, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "experiment work")
+	code, payload := runBinJSON(t, repo, "run", "sensitive/lr")
+	if code != 0 {
+		t.Fatalf("run: %v", payload)
+	}
+	id := runField(t, payload)["id"].(string)
+	if code, payload = runBinJSON(t, repo, "wait", "--run", id, "--timeout", "20"); code != 0 {
+		t.Fatalf("wait: %v", payload)
+	}
+	code, payload = runBinJSON(t, repo, "show", id, "--diff")
+	if code != 0 {
+		t.Fatalf("show: %v", payload)
+	}
+	diff := payload["data"].(map[string]any)["diff"].(string)
+	if !strings.Contains(diff, "committed-after-branch.txt") || strings.Contains(diff, "run.sh") {
+		t.Fatalf("wrong first baseline: %s", diff)
+	}
+}
+
+func TestLatestRunUsesPreciseStartTime(t *testing.T) {
+	repo := scaffold(t)
+	k, err := core.Open(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp, err := k.Find("sensitive/lr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := &core.Run{ID: "20261126-120000-ffff", Exp: exp.ID, Status: core.RunFinished, StartedAt: "2026-11-26T12:00:00.100Z"}
+	second := &core.Run{ID: "20261126-120000-0000", Exp: exp.ID, Status: core.RunFinished, StartedAt: "2026-11-26T12:00:00.200Z"}
+	if err = k.SaveRun(exp, first); err != nil {
+		t.Fatal(err)
+	}
+	if err = k.SaveRun(exp, second); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := k.Representative(exp)
+	if err != nil || run == nil || run.ID != second.ID {
+		t.Fatalf("wrong latest run: %+v %v", run, err)
 	}
 }

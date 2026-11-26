@@ -34,6 +34,7 @@ type Experiment struct {
 	ID                string   `json:"id"`
 	Path              []string `json:"path"`
 	Branch            string   `json:"branch"`
+	StartCommit       string   `json:"start_commit,omitempty"`
 	Hypothesis        string   `json:"hypothesis"`
 	Status            string   `json:"status"`
 	RepresentativeRun string   `json:"representative_run,omitempty"`
@@ -121,15 +122,20 @@ func (k *Kernel) Create(pathStr, why string) (*Experiment, error) {
 	if k.Repo.BranchExists(branch) {
 		return nil, fmt.Errorf("%w: branch %q already exists", ErrConflict, branch)
 	}
+	start, err := k.Repo.Git("rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return nil, fmt.Errorf("%w: 无法确定实验起点: %v", ErrConflict, err)
+	}
 	if err := k.Repo.CreateBranch(branch); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrConflict, err)
 	}
 	exp := &Experiment{
-		ID:         NewID(),
-		Path:       segs,
-		Branch:     branch,
-		Hypothesis: strings.TrimSpace(why),
-		Status:     StatusActive,
+		ID:          NewID(),
+		Path:        segs,
+		Branch:      branch,
+		StartCommit: strings.TrimSpace(start),
+		Hypothesis:  strings.TrimSpace(why),
+		Status:      StatusActive,
 	}
 	if err := records.WriteJSON(filepath.Join(k.Store.ExpDir(exp.ID), "meta.json"), exp); err != nil {
 		return nil, err

@@ -38,3 +38,36 @@ func (k *Kernel) trunkRef() string {
 	}
 	return "HEAD"
 }
+
+// ExperimentBase returns the recorded branch creation commit. Legacy records
+// lack it, so their merge base with the current trunk is an explicit estimate.
+func (k *Kernel) ExperimentBase(exp *Experiment) (string, bool, error) {
+	if exp.StartCommit != "" {
+		if _, err := k.Repo.Git("cat-file", "-e", exp.StartCommit+"^{commit}"); err != nil {
+			return "", false, fmt.Errorf("%w: 实验起点不可用: %v", ErrConflict, err)
+		}
+		return exp.StartCommit, false, nil
+	}
+	runs, err := k.ListRuns(exp)
+	if err != nil {
+		return "", true, err
+	}
+	if len(runs) > 0 && runs[0].Base != "" {
+		return runs[0].Base, true, nil
+	}
+	base, err := k.Repo.Git("merge-base", k.trunkRef(), exp.Branch)
+	if err != nil || strings.TrimSpace(base) == "" {
+		return "", true, fmt.Errorf("%w: 旧实验未记录起点，无法推测分支起点", ErrConflict)
+	}
+	return strings.TrimSpace(base), true, nil
+}
+
+// ExperimentRunDiff compares the experiment origin against its representative run.
+func (k *Kernel) ExperimentRunDiff(exp *Experiment, run *Run) (string, bool, error) {
+	base, inferred, err := k.ExperimentBase(exp)
+	if err != nil {
+		return "", inferred, err
+	}
+	diff, err := k.Repo.DiffRun(base, run.Snapshot)
+	return diff, inferred, err
+}

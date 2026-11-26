@@ -98,7 +98,7 @@ func (k *Kernel) LoadRun(exp *Experiment, runID string) (*Run, error) {
 	return &run, nil
 }
 
-// ListRuns 读出一个实验的全部 run，按标识排序。
+// ListRuns 读出全部 run，按开始时间排序；时间相同时按标识排序。
 func (k *Kernel) ListRuns(exp *Experiment) ([]*Run, error) {
 	entries, err := os.ReadDir(k.RunsDir(exp))
 	if err != nil {
@@ -124,7 +124,16 @@ func (k *Kernel) ListRuns(exp *Experiment) ([]*Run, error) {
 
 func sortRuns(runs []*Run) {
 	for i := 1; i < len(runs); i++ {
-		for j := i; j > 0 && runs[j].ID < runs[j-1].ID; j-- {
+		for j := i; j > 0; j-- {
+			a, aErr := time.Parse(time.RFC3339Nano, runs[j].StartedAt)
+			b, bErr := time.Parse(time.RFC3339Nano, runs[j-1].StartedAt)
+			before := runs[j].ID < runs[j-1].ID
+			if aErr == nil && bErr == nil && !a.Equal(b) {
+				before = a.Before(b)
+			}
+			if !before {
+				break
+			}
 			runs[j], runs[j-1] = runs[j-1], runs[j]
 		}
 	}

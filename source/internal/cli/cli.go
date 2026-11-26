@@ -499,7 +499,7 @@ func (a *app) cmdShow(args []string) (result, error) {
 	payload := map[string]any{"run": run, "experiment": exp.PathString()}
 	diff := ""
 	if showDiff {
-		diff, err = kernel.RunDiff(run)
+		diff, err = kernel.RunDiffForExperiment(exp, run)
 		if err != nil {
 			return result{}, fail(ExitConflict, "%v", err)
 		}

@@ -16,6 +16,12 @@ func (k *Kernel) Snapshot(exp *Experiment, worktree string) (commit, base string
 	if existing, verifyErr := k.Repo.Git("rev-parse", "--verify", "--quiet", k.SnapRef(exp)); verifyErr == nil {
 		base = strings.TrimSpace(existing)
 	}
+	if base == "" {
+		base, _, err = k.ExperimentBase(exp)
+		if err != nil {
+			return "", "", err
+		}
+	}
 	commit, err = k.Repo.Snapshot(worktree, base)
 	if err != nil {
 		return "", "", err
@@ -29,4 +35,17 @@ func (k *Kernel) Snapshot(exp *Experiment, worktree string) (commit, base string
 // RunDiff 返回某个 run 自己的改动（上一个快照到本快照）。
 func (k *Kernel) RunDiff(run *Run) (string, error) {
 	return k.Repo.DiffRun(run.Base, run.Snapshot)
+}
+
+// RunDiffForExperiment handles legacy first runs whose stored base is empty.
+func (k *Kernel) RunDiffForExperiment(exp *Experiment, run *Run) (string, error) {
+	base := run.Base
+	if base == "" {
+		var err error
+		base, _, err = k.ExperimentBase(exp)
+		if err != nil {
+			return "", err
+		}
+	}
+	return k.Repo.DiffRun(base, run.Snapshot)
 }
