@@ -31,6 +31,7 @@ type Run struct {
 	Command    string             `json:"command"`
 	Cwd        string             `json:"cwd"`
 	PID        int                `json:"pid"`
+	WatcherPID int                `json:"watcher_pid,omitempty"`
 	PGID       int                `json:"pgid"`
 	BootID     string             `json:"boot_id"`
 	StartedAt  string             `json:"started_at"`
@@ -216,6 +217,18 @@ func (k *Kernel) Reconcile(run *Run) bool {
 		return false
 	}
 	if !pidAlive(run.PID) {
+		// The watcher may still be collecting artifacts and saving the final status.
+		if run.WatcherPID > 0 && pidAlive(run.WatcherPID) {
+			return false
+		}
+		// A concurrent reader may hold an old running record after the watcher
+		// saved its final result and exited. Never overwrite that result.
+		var latest Run
+		path := filepath.Join(k.Store.ExpDir(run.Exp), "runs", run.ID, "run.json")
+		if records.ReadJSON(path, &latest) == nil && latest.Status != RunRunning {
+			*run = latest
+			return false
+		}
 		run.Status = RunCrashed
 		run.FinishedAt = time.Now().Format(time.RFC3339)
 		return true

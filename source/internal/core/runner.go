@@ -121,6 +121,7 @@ func (k *Kernel) Watch(runDir string) error {
 		_ = k.SaveRun(exp, &run)
 		return err
 	}
+	run.WatcherPID = os.Getpid()
 	run.PID = cmd.Process.Pid
 	run.PGID = cmd.Process.Pid
 	_ = k.SaveRun(exp, &run)
