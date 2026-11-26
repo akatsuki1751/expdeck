@@ -31,7 +31,11 @@ func Open(dir string) (*Repo, error) {
 	top = strings.TrimSpace(top)
 	common = strings.TrimSpace(common)
 	if !filepath.IsAbs(common) {
-		common = filepath.Join(top, common)
+		common = filepath.Join(dir, common)
+		common, err = filepath.Abs(common)
+		if err != nil {
+			return nil, fmt.Errorf("resolve git common directory: %w", err)
+		}
 	}
 	return &Repo{Root: filepath.Clean(top), CommonDir: filepath.Clean(common)}, nil
 }
